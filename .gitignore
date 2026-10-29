@@ -1,0 +1,30 @@
+# Dependencies and tool output (the project has no npm dependencies; these come from local tools)
+node_modules/
+coverage/
+*.log
+
+# Editors and operating systems
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Business data and secrets must never be committed.
+# Backups are made on the device (Backup screen); keep them out of the repository.
+*.shifa.json
+shifa-backup-*
+backup-*.json
+backup-*.gz
+*.sqlite
+*.db
+.env
+.env.*
+*.pem
+*.key
+secrets.*
+syncConfig*.json
+
+# Scratch files made while working
+scripts/_*.tmp.mjs
+tests/_output/

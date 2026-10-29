@@ -1053,15 +1053,23 @@
 
 .pc-top {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-start;
   gap: var(--space-2);
 }
 
 .pc-name {
+  flex: 1 1 7rem;
+  min-width: 0;
   font-weight: 700;
   line-height: 1.25;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+}
+
+/* The stock badge keeps its width, so the name gets the rest of the row. */
+.pc-top > :not(.pc-name) {
+  flex: none;
 }
 
 .pc-urdu {
@@ -1073,6 +1081,7 @@
 
 .pc-bottom {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: var(--space-2);
@@ -2396,4 +2405,31 @@ button.status-pill {
   align-items: center;
   gap: var(--space-2);
   min-height: 44px;
+}
+
+/* Decorative capsules sit behind the hero text and never take a pointer. */
+.dash-hero .capsule {
+  z-index: 0;
+  pointer-events: none;
+}
+
+.dash-hero > :not(.capsule) {
+  position: relative;
+  z-index: 1;
+}
+
+/* Dimmed so the white hero text stays readable where a capsule drifts behind it. */
+.dash-hero .capsule {
+  opacity: 0.28;
+}
+
+.dash-hero .capsule--half {
+  opacity: 0.2;
+}
+
+/* On phones the floating capsules crowd the figures, so they are left out there. */
+@media (max-width: 600px) {
+  .dash-hero .capsule {
+    display: none;
+  }
 }

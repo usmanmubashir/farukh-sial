@@ -14,6 +14,7 @@ import { getProfile, getSettings, saveProfile, saveSettings } from '../services/
 import { bluetoothSupported, connectBluetoothPrinter, printInBrowser, printerConnected, printToBluetooth, sampleReceipt } from '../services/printing.js';
 import { checkIntegrity, recalculateStock } from '../services/stock.js';
 import { importProducts } from '../services/products.js';
+import { isEmptyPharmacy, loadDemoData } from '../services/demo.js';
 import * as sync from '../core/sync.js';
 import { popularMedicines } from '../services/seed-medicines.js';
 
@@ -210,6 +211,7 @@ function appSection() {
        <button type="button" class="btn btn-soft" data-action="persist">${esc(t('settings.requestPersist'))}</button>
        <button type="button" class="btn btn-soft" data-action="install" hidden>${esc(t('settings.install'))}</button>
        <button type="button" class="btn btn-soft" data-action="popular">${esc(t('settings.addPopular'))}</button>
+      <button type="button" class="btn btn-soft" data-action="demo-data">${esc(t('demo.button'))}</button>
        <button type="button" class="btn btn-soft" data-action="integrity">${esc(t('settings.checkIntegrity'))}</button>
        <button type="button" class="btn btn-soft" data-action="recalc">${esc(t('settings.recalculate'))}</button>
        <button type="button" class="btn btn-soft" data-action="camera">${esc(t('settings.cameraTest'))}</button>
@@ -386,7 +388,26 @@ async function connectPrinter() {
   }
 }
 
+/** Adds demo records to an empty pharmacy, after a confirmation. Not offered once the pharmacy has real records. */
+async function loadDemo() {
+  if (!(await isEmptyPharmacy())) {
+    ui.toast(t('demo.notEmpty'), { type: 'info' });
+    return;
+  }
+  const syncing = sync.getStatus().configured;
+  const ok = await ui.confirmDialog({
+    title: t('demo.confirmTitle'),
+    message: t(syncing ? 'demo.confirmSync' : 'demo.confirmText'),
+    confirmLabel: t('demo.confirmButton'),
+  });
+  if (!ok) return;
+  const result = await loadDemoData();
+  ui.toast(t('demo.done', { products: result.products, sales: result.sales }), { type: 'success' });
+  navigate('/dashboard');
+}
+
 async function runAction(action) {
+  if (action === 'demo-data') return loadDemo();
   if (action === 'persist') {
     const granted = navigator.storage?.persist ? await navigator.storage.persist().catch(() => false) : false;
     ui.toast(t(granted ? 'settings.persistYes' : 'settings.persistNo'), { type: granted ? 'success' : 'info' });

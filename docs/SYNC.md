@@ -122,7 +122,7 @@ Each op is `{ opId, stamp, store, op: "put" | "delete", key, record? }`. Throw `
 
 ## Not verified yet
 
-- **The service worker in a real browser.** The in-app browser refuses to register any service worker from this server, even a trivial one, so offline start, the update bar and Background Sync are untested. Check them in Chrome or Edge: open the app once online, then DevTools → Application → Service Workers, and turn on Offline.
+- **The service worker.** Offline start is verified in headless Chrome: the app reloads with the network off and shows the setup screen. The update bar and Background Sync are not yet verified. To check them by hand in Chrome or Edge: open the app once online, then DevTools → Application → Service Workers, and turn on Offline.
 - **A real Supabase project.** The adapter follows the REST and Auth contract, but it has not been run against a live project. Run `docs/supabase.sql` on a test project and sign in from two browsers first.
 - **Large data.** Snapshots are built in memory; 50,000 sales has not been tried through sync.
 

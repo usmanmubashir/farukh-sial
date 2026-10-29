@@ -6,7 +6,7 @@
 // Fonts from Google are cached at runtime. Other same-origin files not in the list are cached as they are fetched.
 // Background Sync: the page registers the 'shifa-sync' tag after each change. This worker wakes an open window to sync.
 // scripts/audit-shell.mjs checks that the list below matches the files on disk.
-const VERSION = '1.1.0';
+const VERSION = '1.2.0'; // The Pages workflow appends the commit SHA here, so each deploy gets a new cache.
 const SHELL_CACHE = `shifa-shell-${VERSION}`;
 const FONT_CACHE = 'shifa-fonts-v1';
 const SYNC_TAG = 'shifa-sync';
@@ -51,6 +51,8 @@ const SHELL = [
   './js/core/ui.js',
   './js/core/version.js',
   './js/core/virtual.js',
+  './js/i18n/demo-en.js',
+  './js/i18n/demo-ur.js',
   './js/i18n/docs-en.js',
   './js/i18n/docs-ur.js',
   './js/i18n/en.js',
@@ -105,6 +107,7 @@ const SHELL = [
   './js/services/backup.js',
   './js/services/dashboard.js',
   './js/services/demand.js',
+  './js/services/demo.js',
   './js/services/errors.js',
   './js/services/ledger.js',
   './js/services/numbering.js',

@@ -1,0 +1,54 @@
+# Deploys the repository root to GitHub Pages on every push to main.
+#
+# The site is plain static files: there is no build step. The only change made in the workflow is to the copy that
+# is uploaded: the commit SHA is appended to the service worker's cache version, so every deploy gets a new cache
+# and devices pick up the new version. The repository itself is never changed.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Assemble the site and cache-bust the service worker
+        run: |
+          rm -rf _site
+          mkdir -p _site
+          rsync -a --exclude '.git' --exclude '.github' ./ _site/
+          sed -i "s/^const VERSION = '\([^']*\)';/const VERSION = '\1-${GITHUB_SHA::12}';/" _site/sw.js
+          grep -n "^const VERSION" _site/sw.js
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

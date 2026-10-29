@@ -16,11 +16,13 @@ import enSync from '../i18n/sync-en.js';
 import urSync from '../i18n/sync-ur.js';
 import enQuality from '../i18n/quality-en.js';
 import urQuality from '../i18n/quality-ur.js';
+import enDemo from '../i18n/demo-en.js';
+import urDemo from '../i18n/demo-ur.js';
 import * as store from './store.js';
 
 // Screen strings override the base dictionaries with the same key.
-const en = { ...enBase, ...enScreens, ...enDocs, ...enParties, ...enReports, ...enSettings, ...enSync, ...enQuality };
-const ur = { ...urBase, ...urScreens, ...urDocs, ...urParties, ...urReports, ...urSettings, ...urSync, ...urQuality };
+const en = { ...enBase, ...enScreens, ...enDocs, ...enParties, ...enReports, ...enSettings, ...enSync, ...enQuality, ...enDemo };
+const ur = { ...urBase, ...urScreens, ...urDocs, ...urParties, ...urReports, ...urSettings, ...urSync, ...urQuality, ...urDemo };
 const DICTIONARIES = { en, ur };
 const RTL_LANGS = ['ur', 'ar', 'fa'];
 const STORAGE_KEY = 'shifa.lang';

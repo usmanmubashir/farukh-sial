@@ -114,7 +114,7 @@ revoke all on public.ops, public.snapshots, public.pharmacy_members, public.phar
 --   2. Turn off public sign-ups: Authentication → Providers → Email → "Allow new users to sign up" = off.
 --   3. Run, with your values:
 --
---   insert into public.pharmacies (name) values ('Al Rehman Pharmacy') returning id;
+--   insert into public.pharmacies (name) values ('Demo Pharmacy') returning id;
 --   insert into public.pharmacy_members (user_id, pharmacy_id)
 --   values ('<the user UID>', '<the pharmacy id returned above>');
 --

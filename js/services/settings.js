@@ -67,8 +67,11 @@ export const DEFAULT_PROFILE = {
   currency: 'PKR',
 };
 
+/** The profile, with the pharmacy name from setup when the profile itself has no name yet. */
 export async function getProfile() {
-  return { ...DEFAULT_PROFILE, ...(await db.getSetting('profile', {})) };
+  const profile = { ...DEFAULT_PROFILE, ...(await db.getSetting('profile', {})) };
+  if (!profile.name) profile.name = (await db.getSetting('pharmacyName', '')) ?? '';
+  return profile;
 }
 
 /** Saves the profile. The name is kept in sync with the 'pharmacyName' setting the rest of the app reads. */

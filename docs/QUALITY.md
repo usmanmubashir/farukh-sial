@@ -43,5 +43,5 @@ What was measured, how to measure it again, and what is still open. Every number
 - **Escaping** is applied at the HTML sinks that were reviewed (receipts, forms, lists, modals, the sync sheet). A full line-by-line pass over every template in 28 files has not been done.
 - **Sync error reasons** from the adapter (for example "No connection to the sync server") are not translated yet.
 - **Storage-full** cannot be triggered in a test. The mapping is in place, the message is written, but the path is untested.
-- **Service worker in the in-app browser** still cannot register, even a trivial one. Offline start and the update bar are unverified (see `docs/SYNC.md`).
+- **Service worker**: offline start is verified in headless Chrome, including under a `/repo-name/` path (the page starts with the network off). The in-app browser refuses to register any worker, so that check was run in headless Chrome instead. The update prompt and Background Sync are not yet verified.
 - **Pages still mix** `esc()` and `text()`. Both are safe where they are used; the rule "use `.text()` for user data" is not enforced by a tool.

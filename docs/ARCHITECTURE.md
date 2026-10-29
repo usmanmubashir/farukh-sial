@@ -147,4 +147,4 @@ Number digits and dates: `js/core/numbers.js` holds the style; money and dates u
 
 Sync: the engine, the Supabase adapter, merge rules, the status pill, the sync sheet and Settings → Sync are in place. The two-device simulation (`tests/sync-sim.html`) passes 20 of 20 checks. Not yet run against a live Supabase project.
 
-Not yet: Bluetooth printing on hardware, camera scanning on a device, and a service worker check in a real browser. The in-app browser refuses to register any service worker from a local server (a trivial one too), so the offline start and the update bar are unverified. See [SYNC.md](SYNC.md#not-verified-yet).
+Not yet: Bluetooth printing on hardware, camera scanning on a device, the update prompt, and Background Sync. Offline start is verified in headless Chrome, under a `/repo-name/` path. See [SYNC.md](SYNC.md#not-verified-yet).
