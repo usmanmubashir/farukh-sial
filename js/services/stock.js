@@ -109,11 +109,19 @@ export async function addBatchIn(ctx, input) {
  * Chooses batches for `units` in FEFO order. Only batches that have not expired and have stock are eligible.
  * Throws without changing anything when the sellable stock is short. Returns the allocations, not yet applied.
  */
-export async function allocateFEFOIn(ctx, productId, units, { today = todayISO() } = {}) {
+export async function allocateFEFOIn(ctx, productId, units, { today = todayISO(), batchId = null } = {}) {
   const product = await ctx.get('products', productId);
   if (!product) throw missing('product', productId);
   const batches = await ctx.getAll('batches', { index: 'productId', query: productId });
-  const sellable = batches.filter((b) => (b.onHand ?? 0) > 0 && b.expiry >= today).sort(fefoOrder);
+  // A manual batch choice still has to be sellable: in stock and not expired.
+  if (batchId) {
+    const chosen = batches.find((b) => b.id === batchId);
+    if (!chosen) throw missing('batch', batchId);
+    if (chosen.expiry < today) throw new ServiceError('batchExpired', { batchNo: chosen.batchNo });
+  }
+  const sellable = batches
+    .filter((b) => (b.onHand ?? 0) > 0 && b.expiry >= today && (!batchId || b.id === batchId))
+    .sort(fefoOrder);
   const available = sellable.reduce((total, b) => total + b.onHand, 0);
   if (available < units) throw new ServiceError('insufficientStock', { available, requested: units });
 

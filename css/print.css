@@ -29,3 +29,40 @@
     padding: 0;
   }
 }
+
+/* Receipts: only the print area prints. The paper width follows the printer setting (58 or 80 mm). */
+#print-area {
+  display: none;
+}
+
+@media print {
+  body > *:not(#print-area) {
+    display: none !important;
+  }
+
+  #print-area {
+    display: block !important;
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 80mm;
+  }
+
+  #print-area[data-width="58"] {
+    width: 58mm;
+  }
+
+  #print-area .receipt {
+    width: 100%;
+    max-width: none;
+    padding: 2mm;
+    border: 0;
+    box-shadow: none;
+    font-size: 10pt;
+    color: #000;
+    background: #fff;
+  }
+
+  @page {
+    margin: 2mm;
+  }
+}

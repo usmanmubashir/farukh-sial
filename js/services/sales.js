@@ -1,16 +1,17 @@
-// Sales: create, void and hold/resume carts.
+// Sales: create, void, and hold/resume carts.
 //
-// A sale is one atomic transaction: validation, FEFO allocation, stock movements, the sale and its lines,
-// the document number, the ledger entry and the outbox rows. Any failure rolls back all of it.
+// A sale is one atomic transaction: validation, FEFO allocation (or a manual batch), stock movements, the sale and
+// its lines, the document number, the ledger entry, the Rx register rows and the outbox rows. A failure rolls it all back.
 //
-//   total   = subtotal − discount + tax
-//   paid    = sum of payments (must not exceed total)
+//   line    = packs × packPrice + looseUnits × loosePrice − lineDiscount
+//   total   = subtotal − discount + tax          (discount: amount, or a percentage of the subtotal)
+//   paid    = cash applied + bank/wallet applied; cash tendered may be more, and the difference is change
 //   balance = total − paid, owed by the customer (udhaar). Walk-in sales must be paid in full.
 //   cost    = cost of the batches the units came from (per allocation)
 //   profit  = (total − tax) − cost
 import * as db from '../core/db.js';
 import { todayISO } from '../core/dates.js';
-import { sum } from '../core/money.js';
+import { percentOf, sum } from '../core/money.js';
 import { ServiceError, missing, optionalInt, requireInt, requireOneOf } from './errors.js';
 import { allocateFEFOIn, applyMovementIn, costOfUnits } from './stock.js';
 import { postEntryIn, reversalLines, saleLines } from './ledger.js';
@@ -20,18 +21,22 @@ import { readSettingsIn } from './settings.js';
 export const PAYMENT_METHODS = ['cash', 'card', 'bank', 'mobile'];
 const DETAILS_REQUIRED_CLASSES = ['rx', 'controlled'];
 
-/** Price of one line from the product's pack and loose prices. */
-function priceLine(product, packs, looseUnits) {
-  if (looseUnits > 0 && !product.looseSelling) {
-    throw new ServiceError('looseNotAllowed', { product: product.name });
-  }
-  return packs * product.salePricePerPack + looseUnits * product.looseUnitPrice;
+/** Price of one line. Price edits are allowed only when the setting allows them. */
+function priceLine(product, raw, settings) {
+  const packPrice = optionalInt(raw.packPrice, 'packPrice', 0, product.salePricePerPack);
+  const loosePrice = optionalInt(raw.loosePrice, 'loosePrice', 0, product.looseUnitPrice);
+  const edited = packPrice !== product.salePricePerPack || loosePrice !== product.looseUnitPrice;
+  if (edited && settings.allowPriceEdit === false) throw new ServiceError('priceEditNotAllowed', { product: product.name });
+  return { packPrice, loosePrice };
 }
 
 /**
  * Creates a sale inside the caller's transaction.
- * input: { customer, items: [{ productId, packs, looseUnits }], discount, tax, payments: [{ method, amount }],
- *          doctor, patient, note, date, today }
+ * input: {
+ *   customer, items: [{ productId, packs, looseUnits, packPrice?, loosePrice?, lineDiscount?, batchId? }],
+ *   discount (paisa) or discountPercent, tax, payments: [{ method, amount }], tendered (cash handed over),
+ *   patient, doctor, note, date, today
+ * }
  */
 export async function createSaleIn(ctx, input) {
   const settings = await readSettingsIn(ctx);
@@ -55,47 +60,63 @@ export async function createSaleIn(ctx, input) {
     const product = await ctx.get('products', raw.productId);
     if (!product) throw missing('product', raw.productId);
     if (!product.active) throw new ServiceError('productInactive', { product: product.name });
+    if (looseUnits > 0 && !product.looseSelling) throw new ServiceError('looseNotAllowed', { product: product.name });
+    const { packPrice, loosePrice } = priceLine(product, raw, settings);
+    const gross = packs * packPrice + looseUnits * loosePrice;
+    const lineDiscount = optionalInt(raw.lineDiscount, 'lineDiscount', 0, 0);
+    if (lineDiscount > gross) throw new ServiceError('discountTooLarge', { subtotal: gross });
     lines.push({
       product,
       packs,
       looseUnits,
       units: packs * product.unitsPerPack + looseUnits,
-      amount: priceLine(product, packs, looseUnits),
+      packPrice,
+      loosePrice,
+      lineDiscount,
+      batchId: raw.batchId || null,
+      amount: gross - lineDiscount,
     });
   }
 
   // 2. Rx and controlled items need patient and doctor when the setting says so.
   const patient = String(input.patient ?? '').trim();
   const doctor = String(input.doctor ?? '').trim();
-  const needsDetails = lines.some((line) => DETAILS_REQUIRED_CLASSES.includes(line.product.class));
-  if (needsDetails && settings.rxRequiresPatientDoctor && (!patient || !doctor)) {
+  const isRx = (line) => DETAILS_REQUIRED_CLASSES.includes(line.product.class);
+  if (lines.some(isRx) && settings.rxRequiresPatientDoctor && (!patient || !doctor)) {
     throw new ServiceError('patientDoctorRequired');
   }
 
   // 3. Totals and payments.
   const subtotal = sum(lines.map((line) => line.amount));
-  const discount = optionalInt(input.discount, 'discount', 0, 0);
+  const discount = input.discountPercent !== undefined && input.discountPercent !== null && input.discountPercent !== ''
+    ? percentOf(subtotal, Math.min(100, Math.max(0, Number(input.discountPercent))))
+    : optionalInt(input.discount, 'discount', 0, 0);
   if (discount > subtotal) throw new ServiceError('discountTooLarge', { subtotal });
   const tax = optionalInt(input.tax, 'tax', 0, 0);
   const total = subtotal - discount + tax;
   if (total <= 0) throw new ServiceError('emptyTotal');
 
-  const payments = (input.payments ?? []).map((p) => ({
-    method: requireOneOf(p.method, PAYMENT_METHODS, 'method'),
-    amount: requireInt(p.amount, 'amount', 1),
-  }));
-  const paid = sum(payments.map((p) => p.amount));
+  const payments = (input.payments ?? [])
+    .map((p) => ({ method: requireOneOf(p.method, PAYMENT_METHODS, 'method'), amount: requireInt(p.amount, 'amount', 1) }));
+  const paidCash = sum(payments.filter((p) => p.method === 'cash').map((p) => p.amount));
+  const paidBank = sum(payments.filter((p) => p.method !== 'cash').map((p) => p.amount));
+  const paid = paidCash + paidBank;
   if (paid > total) throw new ServiceError('overpaid', { total, paid });
+  const tendered = input.tendered === undefined || input.tendered === null || input.tendered === '' ? paidCash : requireInt(input.tendered, 'tendered', 0);
+  if (tendered < paidCash) throw new ServiceError('tenderedTooLow', { due: paidCash });
+  const change = tendered - paidCash;
   const balance = total - paid;
   if (balance > 0 && !customer) throw new ServiceError('walkInCredit');
 
-  // 4. Allocate FEFO and move stock. Each allocation is a movement, so a shortage aborts the whole sale.
+  // 4. Allocate and move stock. Each allocation is a movement, so a shortage aborts the whole sale.
   const saleId = db.newId();
   const saleItems = [];
   let cost = 0;
   for (const line of lines) {
     // Products that do not track stock (services, bundles) sell without allocating batches.
-    const allocations = line.product.trackStock === false ? [] : await allocateFEFOIn(ctx, line.product.id, line.units, { today });
+    const allocations = line.product.trackStock === false
+      ? []
+      : await allocateFEFOIn(ctx, line.product.id, line.units, { today, batchId: line.batchId });
     for (const a of allocations) {
       await applyMovementIn(ctx, {
         productId: line.product.id,
@@ -114,9 +135,14 @@ export async function createSaleIn(ctx, input) {
       saleId,
       productId: line.product.id,
       productName: line.product.name,
+      strength: line.product.strength ?? '',
+      class: line.product.class,
       packs: line.packs,
       looseUnits: line.looseUnits,
       units: line.units,
+      unitPricePack: line.packPrice,
+      unitPriceLoose: line.loosePrice,
+      lineDiscount: line.lineDiscount,
       amount: line.amount,
       cost: itemCost,
       allocations,
@@ -125,7 +151,7 @@ export async function createSaleIn(ctx, input) {
     });
   }
 
-  // 5. Persist the document, then the ledger.
+  // 5. Persist the document, the Rx register rows, then the ledger.
   const number = await nextDocNumber(ctx, 'sale');
   const profit = total - tax - cost;
   const sale = ctx.put('sales', {
@@ -138,6 +164,10 @@ export async function createSaleIn(ctx, input) {
     tax,
     total,
     paid,
+    paidCash,
+    paidBank,
+    tendered,
+    change,
     balance,
     cost,
     profit,
@@ -150,12 +180,30 @@ export async function createSaleIn(ctx, input) {
   });
   for (const item of saleItems) ctx.put('saleItems', item);
 
+  for (const item of saleItems.filter((i) => ['rx', 'controlled'].includes(i.class))) {
+    ctx.put('rxRegister', {
+      id: db.newId(),
+      saleId,
+      saleNumber: number,
+      date,
+      customerId,
+      productId: item.productId,
+      productName: item.productName,
+      strength: item.strength,
+      class: item.class,
+      units: item.units,
+      batches: item.allocations.map((a) => a.batchNo),
+      patient,
+      doctor,
+    });
+  }
+
   const entryId = await postEntryIn(ctx, {
     date,
     docType: 'sale',
     docId: saleId,
     memo: number,
-    lines: saleLines({ paid, balance, net: total - tax, tax, cost, customerId }),
+    lines: saleLines({ paid, paidCash, paidBank, balance, net: total - tax, tax, cost, customerId }),
   });
   return { ...sale, items: saleItems, entryId };
 }
@@ -192,6 +240,9 @@ export function voidSale(saleId, { reason = '', today = todayISO() } = {}) {
       }
     }
 
+    const rxRows = await ctx.getAll('rxRegister', { index: 'saleId', query: saleId });
+    for (const row of rxRows) ctx.remove('rxRegister', row.id);
+
     const original = await ctx.getAll('ledgerEntries', { index: 'doc', query: ['sale', saleId] });
     await postEntryIn(ctx, {
       date: today,
@@ -219,8 +270,15 @@ export async function listSales({ from = '', to = '￿' } = {}) {
   return rows.sort((a, b) => b.date.localeCompare(a.date) || (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
 }
 
+/** Rx and controlled dispensing rows, newest first. */
+export async function listRxRegister({ from = '', to = '￿' } = {}) {
+  const rows = await db.getAll('rxRegister', { index: 'date', query: IDBKeyRange.bound(from, to) });
+  return rows.sort((a, b) => b.date.localeCompare(a.date) || (b.saleNumber ?? '').localeCompare(a.saleNumber ?? ''));
+}
+
 /* ---------- Hold and resume (device-local, in settings) ---------- */
 
+/** Parks a cart. Lines are kept as they were on screen: quantities, pack or loose mode, prices, discounts, batch. */
 export function holdCart(cart) {
   return db.transaction(async (ctx) => {
     const row = await ctx.get('settings', 'heldCarts');
@@ -229,12 +287,9 @@ export function holdCart(cart) {
       id: db.newId(),
       savedAt: new Date().toISOString(),
       customer: cart.customer || null,
-      items: (cart.items ?? []).map((item) => ({
-        productId: item.productId,
-        packs: item.packs ?? 0,
-        looseUnits: item.looseUnits ?? 0,
-      })),
+      items: (cart.items ?? []).map((item) => ({ ...item })),
       discount: cart.discount ?? 0,
+      discountPercent: cart.discountPercent ?? null,
       tax: cart.tax ?? 0,
       patient: cart.patient ?? '',
       doctor: cart.doctor ?? '',

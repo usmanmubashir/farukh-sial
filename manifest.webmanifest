@@ -1,0 +1,16 @@
+{
+  "name": "Shifa Pharmacy POS",
+  "short_name": "Shifa POS",
+  "description": "Offline-first pharmacy management.",
+  "start_url": "./index.html#/dashboard",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f3f7f6",
+  "theme_color": "#0f766e",
+  "lang": "en",
+  "dir": "ltr",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

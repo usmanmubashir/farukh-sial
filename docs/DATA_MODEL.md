@@ -1,6 +1,11 @@
 # Data model
 
-Local database: IndexedDB `shifa-pos`, schema version **1** (see `js/core/db.js`, `migrations`).
+Local database: IndexedDB `shifa-pos`, schema version **2** (see `js/core/db.js`, `migrations`).
+
+| Version | Change |
+|---|---|
+| 1 | Base schema: products, batches, stock movements, parties, sales, purchases, returns, ledger, vouchers, demand list, settings, counters, outbox, users |
+| 2 | Adds `rxRegister` (one row per Rx or controlled line sold, for the Rx register) |
 Every write goes through `db.transaction()`, which also queues synced rows in `outbox` in the same transaction.
 
 ## Conventions
@@ -25,17 +30,18 @@ Every write goes through `db.transaction()`, which also queues synced rows in `o
 | stockMovements | id | batchId, productId, date | yes | `units` (signed), `type`, `docType`, `docId`, `date`, `note`. Source of truth. |
 | customers | id | name(nameKey), phone | yes | `name`, `phone`, `address` |
 | suppliers | id | name(nameKey), phone | yes | `name`, `phone`, `address` |
-| sales | id | date, customerDate[customerId, date], number (unique) | yes | Sale header: subtotal, discount, tax, total, paid, balance, cost, profit, patient, doctor, payments[], status, returnedTotal |
-| saleItems | id | saleId, productId | yes | `packs`, `looseUnits`, `units`, `amount`, `cost`, `allocations[]` (batch, units, costPerPack, returnedUnits), `returnedUnits`, `returnedAmount` |
+| sales | id | date, customerDate[customerId, date], number (unique) | yes | Sale header: subtotal, discount, tax, total, paid, paidCash, paidBank, tendered, change, balance, cost, profit, patient, doctor, payments[] (method cash, card, bank or mobile), status, returnedTotal |
+| saleItems | id | saleId, productId | yes | `packs`, `looseUnits`, `units`, `amount`, `cost`, `unitPricePack`, `unitPriceLoose`, `lineDiscount`, `strength`, `class`, `allocations[]` (batch, units, costPerPack, returnedUnits), `returnedUnits`, `returnedAmount` |
+| rxRegister | id | saleId, date, productId | yes (v2) | One row per Rx or controlled line: `saleNumber`, `date`, `customerId`, `productId`, `productName`, `strength`, `class`, `units`, `batches[]`, `patient`, `doctor`. Removed when its sale is voided |
 | purchases | id | date, supplierDate[supplierId, date], number (unique) | yes | Purchase header: total, paid, balance, returnedValue |
 | purchaseItems | id | purchaseId, productId | yes | `batchId`, `batchNo`, `expiry`, `packs`, `units`, `costPerPack`, `mrp`, `amount`, `returnedPacks` |
 | returns | id | date, typeDate[type, date], number (unique) | yes | `type`: `sale` (SRN) or `purchase` (PRN). gross, tax, net, refund, credit, cost, entryId |
 | returnItems | id | returnId, productId | yes | Return lines. Sale returns list the batches restored. |
-| accounts | id | code (unique) | yes | Chart of accounts. System rows have `system: true` and fixed ids (`acc-1000`...). |
+| accounts | id | code (unique) | yes | Chart of accounts. System rows have `system: true` and fixed ids (`acc-1000`...). Bank (`1010`) is a system account; card, bank transfer and wallet receipts post there, cash posts to `1000`. |
 | ledgerEntries | id | accountDate[accountId, date], date, doc[docType, docId] | yes | One row per line: `entryId`, `accountCode`, `partyId`, `debit`, `credit`, `docType`, `docId`, `memo` |
 | vouchers | id | date, number (unique) | yes | `type`: receipt (RCV), payment (PAY), transfer (TRF), adjustment (ADJ) |
 | demandList | id | productId, status | yes | `name`, `nameKey`, `packs`, `reason` (low_stock, not_found, manual), `status` (open, ordered), `note` |
-| settings | key | — | no | `{ key, value }`. Keys: `pharmacyName`, `deviceId`, `session`, `business` (business rules), `heldCarts` (parked carts) |
+| settings | key | — | no | `{ key, value }`. Keys: `pharmacyName`, `deviceId`, `session`, `business` (business rules), `heldCarts` (parked carts). Business rules that the sale screen reads: `rxRequiresPatientDoctor` (true), `voidSameDayOnly` (true), `allowPriceEdit` (true), `receiptWidth` (80 or 58 mm), `receiptShowBatch` (false), `receiptShowDirections` (true), `devicePrefix`, `productGroups` |
 | counters | key | — | no | `{ key, value }`. Last issued number per sequence |
 | syncState | key | — | no | Sync cursor and adapter state |
 | outbox | seq (auto) | status | no | `{ store, op: 'put' \| 'delete', key, record?, status, createdAt, attempts }` |

@@ -13,6 +13,14 @@ export const DEFAULT_SETTINGS = {
   updateSalePriceOnMrpChange: true,
   /** Batches expiring within this many days show as "soon". */
   expiryWarnDays: 90,
+  /** The sale screen may change a price per pack or per unit. Turn off to hold prices at the list price. */
+  allowPriceEdit: true,
+  /** Receipt paper width in millimetres: 58 or 80. */
+  receiptWidth: 80,
+  /** Print the batch number and expiry on each receipt line. */
+  receiptShowBatch: false,
+  /** Print each medicine's usual directions under it. */
+  receiptShowDirections: true,
   /** Optional per-device prefix, so two devices never issue the same document number. */
   devicePrefix: '',
   docPrefixes: {

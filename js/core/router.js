@@ -140,7 +140,8 @@ export function createRouter({ routes, notFound, view }) {
     emit('route:after', { to, from, module });
 
     await anim.enter(view);
-    view[0]?.focus({ preventScroll: true });
+    // A page can ask for focus with the autofocus attribute (the sale screen does); otherwise the view takes it.
+    (view[0]?.querySelector('[autofocus]') ?? view[0])?.focus({ preventScroll: true });
     window.scrollTo?.(0, 0);
   }
 

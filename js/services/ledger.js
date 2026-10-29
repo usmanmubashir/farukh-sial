@@ -12,6 +12,7 @@ import { nextDocNumber } from './numbering.js';
 
 export const ACCOUNT = {
   cash: '1000',
+  bank: '1010',
   receivable: '1100',
   inventory: '1200',
   payable: '2000',
@@ -29,6 +30,7 @@ export const ACCOUNT = {
 /** System accounts. Fixed ids, so every device seeds the same rows. They cannot be deleted. */
 export const DEFAULT_ACCOUNTS = [
   { id: 'acc-1000', code: '1000', key: 'account.cashInHand', type: 'asset', normal: 'debit' },
+  { id: 'acc-1010', code: '1010', key: 'account.bank', type: 'asset', normal: 'debit' },
   { id: 'acc-1100', code: '1100', key: 'account.customerReceivables', type: 'asset', normal: 'debit' },
   { id: 'acc-1200', code: '1200', key: 'account.inventory', type: 'asset', normal: 'debit' },
   { id: 'acc-2000', code: '2000', key: 'account.supplierPayables', type: 'liability', normal: 'credit' },
@@ -149,9 +151,11 @@ export function postEntry(entry) {
 /* ---------- Line builders (pure). Each returns lines that balance. ---------- */
 
 /** Sale: money in (paid + balance receivable) against net sales and tax, and cost moves Inventory → COGS. */
-export function saleLines({ paid, balance, net, tax, cost, customerId = null }) {
+export function saleLines({ paid, paidBank = 0, paidCash, balance, net, tax, cost, customerId = null }) {
+  const cashIn = paidCash ?? paid - paidBank;
   return [
-    { account: ACCOUNT.cash, debit: paid },
+    { account: ACCOUNT.cash, debit: cashIn },
+    { account: ACCOUNT.bank, debit: paidBank },
     { account: ACCOUNT.receivable, debit: balance, partyId: customerId },
     { account: ACCOUNT.sales, credit: net },
     { account: ACCOUNT.salesTax, credit: tax },

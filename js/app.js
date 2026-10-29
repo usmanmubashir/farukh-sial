@@ -25,7 +25,7 @@ const ROUTES = [
   { path: '/login', guard: 'guest', chrome: false, load: page('login') },
 
   { path: '/dashboard', nav: 'daily', label: 'nav.home', icon: 'home', bottom: 'home', load: page('dashboard') },
-  { path: '/new-sale', nav: 'daily', label: 'nav.newSale', icon: 'cart', bottom: 'sell', load: page('newsale') },
+  { path: '/pos', nav: 'daily', label: 'nav.newSale', icon: 'cart', bottom: 'sell', load: page('pos') },
   { path: '/sales', nav: 'daily', icon: 'receipt', load: page('sales') },
   { path: '/purchases', nav: 'daily', icon: 'purchase', load: page('purchases') },
   { path: '/returns', nav: 'daily', icon: 'returns', load: page('returns') },
@@ -63,6 +63,14 @@ const GROUPS = [
 /** Mobile bottom bar, left to right: Home, Stock, floating Sell, Expiry, then More (opens the drawer). */
 const BOTTOM = ['home', 'stock', 'sell', 'expiry'];
 
+/** Offline shell: the service worker caches the app; this registers it once the page has loaded. */
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch((err) => console.warn('[sw] registration failed', err));
+  });
+}
+
 const DEV_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 const isDevHost = () => DEV_HOSTS.includes(location.hostname) || location.hostname.endsWith('.localhost');
 
@@ -75,6 +83,7 @@ const labelKey = (route) => route.label ?? `nav.${route.path.slice(1)}`;
 /** Access rules for every route, run before the page loads. */
 async function accessGuard(to) {
   if (to.path === '/') return '/dashboard';
+  if (to.path === '/new-sale') return '/pos';
   if (to.route?.dev) return isDevHost() ? undefined : '/dashboard';
 
   const guard = to.route?.guard ?? 'auth';
@@ -314,6 +323,7 @@ async function boot() {
   i18n.init();
   ui.initTheme();
   anim.install();
+  registerServiceWorker();
   document.querySelectorAll('[data-icon]').forEach((el) => {
     el.innerHTML = ui.icon(el.dataset.icon);
   });

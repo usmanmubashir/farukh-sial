@@ -11,7 +11,7 @@ export const route = '/dashboard';
 export const title = 'nav.home';
 
 const TILES = [
-  { key: 'sell', path: '/new-sale', accent: 'green', icon: 'cart' },
+  { key: 'sell', path: '/pos', accent: 'green', icon: 'cart' },
   { key: 'buy', path: '/purchases', accent: 'blue', icon: 'purchase' },
   { key: 'expiry', path: '/expiry', accent: 'orange', icon: 'clock' },
   { key: 'stock', path: '/stock', accent: 'teal', icon: 'stock' },
@@ -77,7 +77,7 @@ function hero(d) {
         <div><span>${esc(i18n.t('hero.cashOut'))}</span><strong>${money(d.hero.cashOut)}</strong></div>
       </div>
       <div class="hero-actions">
-        <a class="btn hero-btn hero-btn--solid" href="#/new-sale">${esc(i18n.t('hero.newSale'))}</a>
+        <a class="btn hero-btn hero-btn--solid" href="#/pos">${esc(i18n.t('hero.newSale'))}</a>
         <a class="btn hero-btn" href="#/purchases">${esc(i18n.t('hero.newPurchase'))}</a>
       </div>
     </section>`;
@@ -233,6 +233,7 @@ function animateIn() {
   anim.scanCounts($host[0]);
   anim.syncIndicators($host[0]);
   requestAnimationFrame(() => {
+    if (!$host) return; // the page was left before the frame ran
     $host.find('.ring-arc').each(function drawRing() {
       this.style.transition = 'stroke-dashoffset 900ms cubic-bezier(0.16, 1, 0.3, 1)';
       this.style.strokeDashoffset = this.dataset.targetOffset;

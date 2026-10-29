@@ -34,6 +34,7 @@
     import * as demand from '../js/services/demand.js';
     import * as parties from '../js/services/parties.js';
     import * as settings from '../js/services/settings.js';
+    import * as pos from '../js/services/pos.js';
 
     db.useDatabase('shifa-services-test');
 
@@ -276,8 +277,7 @@
       eq('payment voucher numbered PAY', payment.number, 'PAY-0001');
       eq('payment reduces supplier payable', await ledger.partyBalance(sup.id, '2000'), -5000);
 
-      await ledger.createAccount({ code: '1010', name: 'Bank HBL', type: 'asset', normal: 'debit' });
-      await fails('duplicate account code rejected', () => ledger.createAccount({ code: '1010', name: 'Again', type: 'asset', normal: 'debit' }), 'accountExists');
+      await fails('duplicate account code rejected', () => ledger.createAccount({ code: '1000', name: 'Again', type: 'asset', normal: 'debit' }), 'accountExists');
       const moved = await ledger.transfer({ amount: 6000, fromCode: '1000', toCode: '1010' });
       eq('transfer voucher numbered TRF', moved.number, 'TRF-0001');
       eq('transfer moves money into the bank', (await ledger.accountBalance('1010')).balance, 6000);
@@ -369,7 +369,7 @@
       const heldId = await sales.holdCart({ customer: null, items: [{ productId: pan.id, packs: 1 }], note: 'customer is checking price' });
       eq('one cart on hold', (await sales.listHeldCarts()).length, 1);
       const resumed = await sales.resumeCart(heldId);
-      eq('resumed cart keeps its items', resumed.items, [{ productId: pan.id, packs: 1, looseUnits: 0 }]);
+      eq('resumed cart keeps its items', resumed.items, [{ productId: pan.id, packs: 1 }]);
       eq('resume removes the cart from hold', (await sales.listHeldCarts()).length, 0);
       await fails('resuming twice fails', () => sales.resumeCart(heldId), 'notFound');
 
@@ -620,6 +620,71 @@
       eq('whole book balances after returns', (await ledger.trialBalance()).balanced, true);
     }
 
+    /* ---------- 9. sale screen (POS) ---------- */
+
+    async function posGroup() {
+      const pan = await products.createProduct({
+        name: 'Panadol 500mg', generic: 'Paracetamol', barcode: '890100', code: 'PAN500', soldAs: 'strip', unitsPerPack: 10,
+        looseSelling: true, looseUnitPrice: 450, costPerPack: 2000, salePricePerPack: 4000,
+      });
+      await stock.addBatch({ productId: pan.id, batchNo: 'P-LATE', expiry: isoIn(200), packs: 2, costPerPack: 2000, mrp: 4000 });
+      await stock.addBatch({ productId: pan.id, batchNo: 'P-SOON', expiry: isoIn(30), packs: 2, costPerPack: 2000, mrp: 4000 });
+      await stock.addBatch({ productId: pan.id, batchNo: 'P-BULK', expiry: isoIn(300), packs: 20, costPerPack: 2000, mrp: 4000 });
+
+      // Cards: stock status, the nearest sellable batch (FEFO), and barcode lookup.
+      const [card] = await pos.saleCards({ query: 'panadol', today, limit: 5 });
+      eq('card shows the earliest expiry', card.nearestExpiry, isoIn(30));
+      eq('card stock in packs', card.packs, 24);
+      eq('card status is in stock', card.status, 'in');
+      eq('barcode finds the card', (await pos.cardForBarcode('890100', { today }))?.name, 'Panadol 500mg');
+
+      const gone = await products.createProduct({ name: 'Calpol Gone', generic: 'Paracetamol', code: 'CG1', soldAs: 'strip', unitsPerPack: 10, costPerPack: 1000, salePricePerPack: 1500 });
+      const [goneCard] = await pos.saleCards({ query: 'calpol gone', today, limit: 5 });
+      eq('product with no stock shows out', goneCard.status, 'out');
+      eq('out-of-stock product offers in-stock alternatives', (await pos.alternativesInStock(gone.id, { today })).map((a) => a.name), ['Panadol 500mg']);
+
+      // Bank and wallet payments are kept apart from cash and go to the bank account.
+      const split = await sales.createSale({ items: [{ productId: pan.id, packs: 1 }], payments: [{ method: 'cash', amount: 1000 }, { method: 'bank', amount: 3000 }] });
+      eq('bank part stored separately', [split.paidCash, split.paidBank], [1000, 3000]);
+      eq('bank account holds the bank part', (await ledger.accountBalance('1010')).balance, 3000);
+
+      // Change is the cash handed over beyond the cash due.
+      const changed = await sales.createSale({ items: [{ productId: pan.id, packs: 1 }], payments: [{ method: 'cash', amount: 4000 }], tendered: 5000 });
+      eq('change due', changed.change, 1000);
+      await fails('tendered below the cash due rejected', () => sales.createSale({ items: [{ productId: pan.id, packs: 1 }], payments: [{ method: 'cash', amount: 4000 }], tendered: 3000 }), 'tenderedTooLow');
+
+      // Line discount, percent discount and a changed price.
+      const lined = await sales.createSale({ items: [{ productId: pan.id, packs: 2, lineDiscount: 500 }], payments: [{ method: 'cash', amount: 7500 }] });
+      eq('line discount reduces the line', lined.total, 7500);
+      const pct = await sales.createSale({ items: [{ productId: pan.id, packs: 2 }], discountPercent: 10, payments: [{ method: 'cash', amount: 7200 }] });
+      eq('percent discount on the subtotal', [pct.discount, pct.total], [800, 7200]);
+      const priced = await sales.createSale({ items: [{ productId: pan.id, packs: 1, packPrice: 3800 }], payments: [{ method: 'cash', amount: 3800 }] });
+      eq('edited price is used', priced.subtotal, 3800);
+      await settings.saveSettings({ allowPriceEdit: false });
+      await fails('price edit blocked by the setting', () => sales.createSale({ items: [{ productId: pan.id, packs: 1, packPrice: 3500 }], payments: [{ method: 'cash', amount: 3500 }] }), 'priceEditNotAllowed');
+      await settings.saveSettings({ allowPriceEdit: true });
+
+      // A chosen batch overrides FEFO (FEFO would take P-MID here). An expired batch can never be chosen.
+      await stock.addBatch({ productId: pan.id, batchNo: 'P-MID', expiry: isoIn(100), packs: 2, costPerPack: 2000, mrp: 4000 });
+      const bulk = (await stock.batchRows({ productId: pan.id, today, withStockOnly: false })).find((b) => b.batchNo === 'P-BULK');
+      const manual = await sales.createSale({ items: [{ productId: pan.id, packs: 1, batchId: bulk.batchId }], payments: [{ method: 'cash', amount: 4000 }] });
+      eq('manual batch overrides FEFO', (await sales.getSaleWithItems(manual.id)).items[0].allocations.map((a) => a.batchNo), ['P-BULK']);
+      const old = await products.createProduct({ name: 'Old Syrup', code: 'OLD1', soldAs: 'bottle', unitsPerPack: 1, costPerPack: 100, salePricePerPack: 200 });
+      await stock.addBatch({ productId: old.id, batchNo: 'O-1', expiry: isoIn(-5), packs: 3, costPerPack: 100 });
+      const oldBatch = (await stock.batchRows({ productId: old.id, today, withStockOnly: false }))[0];
+      await fails('expired batch cannot be chosen by hand', () => sales.createSale({ items: [{ productId: old.id, packs: 1, batchId: oldBatch.batchId }], payments: [{ method: 'cash', amount: 200 }] }), 'batchExpired');
+
+      // Rx lines go to the Rx register, and voiding the sale takes them out again.
+      const rx = await products.createProduct({ name: 'Ciproxin', code: 'CIP2', class: 'rx', soldAs: 'strip', unitsPerPack: 10, costPerPack: 7000, salePricePerPack: 9500 });
+      await stock.addBatch({ productId: rx.id, batchNo: 'R-1', expiry: isoIn(200), packs: 2, costPerPack: 7000 });
+      const rxSale = await sales.createSale({ items: [{ productId: rx.id, packs: 1 }], payments: [{ method: 'cash', amount: 9500 }], patient: 'Sara', doctor: 'Dr. Ahmed' });
+      eq('Rx register row written for the sale', (await sales.listRxRegister()).map((r) => [r.saleId, r.productName]), [[rxSale.id, 'Ciproxin']]);
+      await sales.voidSale(rxSale.id, { reason: 'test' });
+      eq('voiding removes the Rx register row', (await sales.listRxRegister()).length, 0);
+
+      eq('whole book balances after sale screen sales', (await ledger.trialBalance()).balanced, true);
+    }
+
     /* ---------- runner ---------- */
 
     const groups = [
@@ -631,6 +696,7 @@
       ['returns', returnsGroup],
       ['demand list', demandGroup],
       ['medicines, expiry and dashboard', medicinesGroup],
+      ['sale screen', posGroup],
     ];
 
     const list = document.getElementById('results');

@@ -9,7 +9,7 @@ let dbName = DEFAULT_DB_NAME;
 export const SYNCED_STORES = [
   'products', 'batches', 'stockMovements', 'customers', 'suppliers',
   'sales', 'saleItems', 'purchases', 'purchaseItems', 'returns', 'returnItems',
-  'accounts', 'ledgerEntries', 'vouchers', 'demandList',
+  'accounts', 'ledgerEntries', 'vouchers', 'demandList', 'rxRegister',
 ];
 
 /** Device-local stores. Never synced: passwords (users) and sessions stay on this device. */
@@ -103,6 +103,13 @@ const migrations = [
 
     const users = db.createObjectStore('users', { keyPath: 'id' });
     users.createIndex('username', 'username', { unique: true });
+  },
+  // v2: Rx and controlled dispensing register (written by sales, read by the Rx register screen).
+  (db) => {
+    const rx = db.createObjectStore('rxRegister', { keyPath: 'id' });
+    rx.createIndex('saleId', 'saleId');
+    rx.createIndex('date', 'date');
+    rx.createIndex('productId', 'productId');
   },
 ];
 
