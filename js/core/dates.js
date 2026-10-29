@@ -43,6 +43,23 @@ export function formatDateTime(ms) {
   return `${formatDate(toISODate(date))} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+/**
+ * Accepts "MM/YY", "MM/YYYY" or an ISO date and returns the ISO date of the last day of that month
+ * (a pharmacy expiry month is usable until its last day). Returns null when the text is not valid.
+ */
+export function expiryFromInput(input) {
+  const text = String(input ?? '').trim();
+  if (isValidISODate(text)) return text;
+  const match = /^(\d{1,2})\/(\d{2}|\d{4})$/.exec(text);
+  if (!match) return null;
+  const month = Number(match[1]);
+  let year = Number(match[2]);
+  if (match[2].length === 2) year += 2000;
+  if (month < 1 || month > 12) return null;
+  const lastDay = new Date(year, month, 0).getDate();
+  return `${year}-${pad(month)}-${pad(lastDay)}`;
+}
+
 /** 'expired' | 'soon' (within warnDays) | 'ok' | 'unknown'. Used for batch expiry. */
 export function expiryState(expiryISO, { today = todayISO(), warnDays = 90 } = {}) {
   if (!isValidISODate(expiryISO)) return 'unknown';

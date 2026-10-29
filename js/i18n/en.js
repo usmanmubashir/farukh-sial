@@ -153,6 +153,12 @@ export default {
   'account.purchases': 'Purchases',
   'account.purchaseReturns': 'Purchase Returns',
   'account.generalExpenses': 'General Expenses',
+  'account.inventory': 'Inventory',
+  'account.costOfGoodsSold': 'Cost of Goods Sold',
+
+  'demand.wa.header': 'Order list for {pharmacy} ({date})',
+  'demand.wa.line': '{index}. {name} — {packs} pack(s){note}',
+  'demand.wa.empty': 'Nothing to order today.',
 
   'stub.body': 'This screen arrives in a later milestone. The foundation for it is in place.',
 

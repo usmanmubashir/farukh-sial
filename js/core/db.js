@@ -2,7 +2,8 @@
 // Writes go through transaction(), which queues synced rows in the outbox inside the same transaction.
 import { emit } from './events.js';
 
-const DB_NAME = 'shifa-pos';
+const DEFAULT_DB_NAME = 'shifa-pos';
+let dbName = DEFAULT_DB_NAME;
 
 /** Business rows: every write is also queued in the outbox for sync. */
 export const SYNCED_STORES = [
@@ -109,6 +110,27 @@ export const DB_VERSION = migrations.length;
 
 let dbPromise = null;
 
+/** Test hook: point the layer at another database. Must run before the first open(). */
+export function useDatabase(name) {
+  if (dbPromise) throw new Error('useDatabase() must run before the database is opened');
+  dbName = name;
+}
+
+/** Closes the connection and deletes the database. Test hook for clean runs. */
+export async function destroyDatabase() {
+  if (dbPromise) {
+    const db = await dbPromise.catch(() => null);
+    db?.close();
+    dbPromise = null;
+  }
+  await new Promise((resolve, reject) => {
+    const req = indexedDB.deleteDatabase(dbName);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+    req.onblocked = () => resolve();
+  });
+}
+
 /** Opens (and upgrades) the database once per page. */
 export function open() {
   if (!dbPromise) {
@@ -117,7 +139,7 @@ export function open() {
         reject(new Error('IndexedDB is not available in this browser'));
         return;
       }
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
+      const request = indexedDB.open(dbName, DB_VERSION);
       request.onupgradeneeded = (event) => {
         for (let v = event.oldVersion; v < DB_VERSION; v += 1) {
           migrations[v](request.result, request.transaction);

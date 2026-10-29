@@ -153,6 +153,12 @@ export default {
   'account.purchases': 'خریداری',
   'account.purchaseReturns': 'خریداری کی واپسی',
   'account.generalExpenses': 'عمومی اخراجات',
+  'account.inventory': 'اسٹاک',
+  'account.costOfGoodsSold': 'فروخت شدہ مال کی لاگت',
+
+  'demand.wa.header': 'آرڈر لسٹ: {pharmacy} ({date})',
+  'demand.wa.line': '{index}. {name} — {packs} پیک{note}',
+  'demand.wa.empty': 'آج کوئی آرڈر نہیں۔',
 
   'stub.body': 'یہ اسکرین بعد کے مرحلے میں آئے گی۔ اس کی بنیاد تیار ہے۔',
 

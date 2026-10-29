@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shifa POS services tests</title>
+  <link rel="stylesheet" href="../css/tokens.css">
+  <link rel="stylesheet" href="../css/base.css">
+  <link rel="stylesheet" href="../css/components.css">
+  <style>
+    .pass { color: var(--c-ok); font-weight: 600; }
+    .fail { color: var(--c-danger); font-weight: 600; }
+    .detail { white-space: pre-wrap; color: var(--c-danger); font-size: var(--fs-sm); margin: 0.25rem 0 0; }
+    li { margin-block-end: var(--space-3); }
+  </style>
+</head>
+<body>
+  <main class="view">
+    <h1>Services test runner</h1>
+    <p id="summary" class="muted">Running…</p>
+    <ol id="results"></ol>
+  </main>
+
+  <script type="module">
+    // Runs against its own IndexedDB, so the app's data is never touched.
+    import * as db from '../js/core/db.js';
+    import { addDays, todayISO } from '../js/core/dates.js';
+    import * as products from '../js/services/products.js';
+    import * as stock from '../js/services/stock.js';
+    import * as ledger from '../js/services/ledger.js';
+    import * as sales from '../js/services/sales.js';
+    import * as purchases from '../js/services/purchases.js';
+    import * as returns from '../js/services/returns.js';
+    import * as demand from '../js/services/demand.js';
+    import * as parties from '../js/services/parties.js';
+    import * as settings from '../js/services/settings.js';
+
+    db.useDatabase('shifa-services-test');
+
+    /* ---------- assertion helpers ---------- */
+
+    let assertions = 0;
+    let failures = [];
+    let current = '';
+
+    function ok(label, condition) {
+      assertions += 1;
+      if (!condition) failures.push(`${label}`);
+    }
+
+    function eq(label, actual, expected) {
+      assertions += 1;
+      const a = JSON.stringify(actual);
+      const e = JSON.stringify(expected);
+      if (a !== e) failures.push(`${label}: expected ${e}, got ${a}`);
+    }
+
+    /** Passes when fn() rejects with a ServiceError whose code is `code`. */
+    async function fails(label, fn, code) {
+      assertions += 1;
+      try {
+        await fn();
+      } catch (err) {
+        if (err.code !== code) failures.push(`${label}: expected error ${code}, got ${err.code ?? err.message}`);
+        return;
+      }
+      failures.push(`${label}: expected error ${code}, but it succeeded`);
+    }
+
+    /* ---------- date fixtures ---------- */
+
+    const pad = (n) => String(n).padStart(2, '0');
+    const today = todayISO();
+    const isoIn = (days) => addDays(today, days);
+
+    /** MM/YY for the month `offset` months from now. */
+    function monthYear(offset) {
+      const d = new Date();
+      const m = new Date(d.getFullYear(), d.getMonth() + offset, 1);
+      return `${pad(m.getMonth() + 1)}/${String(m.getFullYear()).slice(-2)}`;
+    }
+
+    /** ISO last day of the month `offset` months from now. */
+    function monthEndIso(offset) {
+      const d = new Date();
+      const last = new Date(d.getFullYear(), d.getMonth() + offset + 1, 0);
+      return `${last.getFullYear()}-${pad(last.getMonth() + 1)}-${pad(last.getDate())}`;
+    }
+
+    async function resetDb() {
+      await db.destroyDatabase();
+      await ledger.seedDefaultAccounts();
+    }
+
+    const stockUnits = async (productId) => (await stock.stockOf(productId)).units;
+    const batchUnits = async (productId, batchNo) =>
+      (await stock.batchStock(productId)).find((b) => b.batchNo === batchNo)?.units;
+
+    /* ---------- 1. products ---------- */
+
+    async function productsGroup() {
+      const pan = await products.createProduct({
+        name: '  Panadol 500mg ',
+        generic: 'Paracetamol',
+        company: 'GSK',
+        barcode: '890100',
+        code: 'PAN500',
+        class: 'otc',
+        storage: 'room',
+        soldAs: 'strip',
+        unitsPerPack: 10,
+        unitName: 'tablet',
+        looseSelling: true,
+        looseUnitPrice: 450,
+        costPerPack: 3000,
+        salePricePerPack: 4000,
+        reorderLevel: 5,
+        reorderQty: 10,
+      });
+      eq('name trimmed', pan.name, 'Panadol 500mg');
+      eq('name key lowercased', pan.nameKey, 'panadol 500mg');
+      eq('active by default', pan.active, true);
+      eq('units per pack stored', pan.unitsPerPack, 10);
+
+      const base = { storage: 'room', soldAs: 'strip', unitsPerPack: 10, looseSelling: false };
+      await fails('invalid class rejected', () => products.createProduct({ ...base, name: 'X', code: 'X1', class: 'weird' }), 'invalidField');
+      await fails('zero units per pack rejected', () => products.createProduct({ ...base, name: 'Y', code: 'Y1', unitsPerPack: 0 }), 'invalidField');
+      await fails('loose selling needs a loose price', () => products.createProduct({ ...base, name: 'Z', code: 'Z1', looseSelling: true, looseUnitPrice: 0 }), 'looseNeedsPrice');
+      await fails('loose selling needs a pack of 2+', () => products.createProduct({ ...base, name: 'Z2', code: 'Z2', unitsPerPack: 1, looseSelling: true, looseUnitPrice: 100 }), 'looseNeedsPack');
+      await fails('duplicate code rejected', () => products.createProduct({ name: 'Dup', code: 'PAN500', barcode: '111' }), 'codeTaken');
+      await fails('duplicate barcode rejected', () => products.createProduct({ name: 'Dup2', code: 'NEW1', barcode: '890100' }), 'barcodeTaken');
+
+      const brufen = await products.createProduct({ name: 'Brufen 400', generic: 'Ibuprofen', company: 'Abbott', barcode: '890200', code: 'BRU400', soldAs: 'strip', unitsPerPack: 10, costPerPack: 4500, salePricePerPack: 6000 });
+      const calpol = await products.createProduct({ name: 'Calpol 500', generic: 'paracetamol', company: 'GSK Pakistan', barcode: '890300', code: 'CAL500', unitsPerPack: 10, salePricePerPack: 3500 });
+      const augmentin = await products.createProduct({ name: 'Augmentin 625', generic: 'Amoxicillin', company: 'GSK', barcode: '890400', code: 'AUG625', class: 'rx', soldAs: 'strip', unitsPerPack: 6, salePricePerPack: 95000 });
+
+      const ids = (rows) => rows.map((r) => r.id);
+      ok('search by name prefix finds Panadol', ids(await products.searchProducts('pan')).includes(pan.id));
+      ok('search by company finds GSK products', ids(await products.searchProducts('gsk')).includes(augmentin.id) && ids(await products.searchProducts('gsk')).includes(calpol.id));
+      eq('search by barcode is exact and first', ids(await products.searchProducts('890100'))[0], pan.id);
+      eq('search by code ignores case', ids(await products.searchProducts('pan500'))[0], pan.id);
+      ok('search by salt (generic) finds both paracetamol products', ids(await products.searchProducts('paracet')).includes(pan.id) && ids(await products.searchProducts('paracet')).includes(calpol.id));
+      eq('blank search returns nothing', await products.searchProducts('   '), []);
+
+      await products.deactivateProduct(brufen.id);
+      eq('inactive product hidden from search', ids(await products.searchProducts('brufen')).length, 0);
+      eq('inactive product found with includeInactive', ids(await products.searchProducts('brufen', { includeInactive: true })), [brufen.id]);
+      eq('deactivated flag stored', (await products.getProduct(brufen.id)).active, false);
+      await products.activateProduct(brufen.id);
+
+      eq('alternatives: same salt only, excluding itself', ids(await products.alternatives(pan.id)), [calpol.id]);
+      eq('alternatives: none for a different salt', ids(await products.alternatives(augmentin.id)), []);
+
+      const updated = await products.updateProduct(pan.id, { salePricePerPack: 4200 });
+      eq('update changes the price', updated.salePricePerPack, 4200);
+      eq('update keeps the name', updated.name, 'Panadol 500mg');
+      await fails('update rejects bad class', () => products.updateProduct(pan.id, { class: 'nope' }), 'invalidField');
+      await fails('update of missing product', () => products.updateProduct('missing-id', { name: 'x' }), 'notFound');
+    }
+
+    /* ---------- 2. stock ---------- */
+
+    async function stockGroup() {
+      const prod = await products.createProduct({
+        name: 'Amoxil 250', generic: 'Amoxicillin', company: 'Sami', barcode: '777001', code: 'AMX250',
+        soldAs: 'strip', unitsPerPack: 10, looseSelling: true, looseUnitPrice: 500, costPerPack: 2000, salePricePerPack: 2600,
+        reorderLevel: 2, reorderQty: 5,
+      });
+
+      // Three batches. Expiry order: C (this month) < A (+60 days) < B (+120 days).
+      await stock.addBatch({ productId: prod.id, batchNo: 'B-A', expiry: isoIn(60), packs: 2, costPerPack: 2000, mrp: 2600 });
+      await stock.addBatch({ productId: prod.id, batchNo: 'B-B', expiry: isoIn(120), packs: 3, costPerPack: 2000, mrp: 2600 });
+      const batchC = await stock.addBatch({ productId: prod.id, batchNo: 'B-C', expiry: monthYear(0), packs: 1, costPerPack: 2000, mrp: 2600 });
+
+      eq('MM/YY expiry stored as last day of month', batchC.expiry, monthEndIso(0));
+      const start = await stock.stockOf(prod.id);
+      eq('stock after addBatch: units', start.units, 60);
+      eq('stock in packs', start.packs, 6);
+      eq('stock loose units', start.looseUnits, 0);
+
+      const first = await stock.consume(prod.id, 25, { docType: 'test' });
+      eq('FEFO: first batch used is the earliest expiry', first.map((a) => a.batchNo), ['B-C', 'B-A']);
+      eq('FEFO: units taken from each batch', first.map((a) => a.units), [10, 15]);
+      eq('stock after consume', await stockUnits(prod.id), 35);
+      eq('packs and loose after consume', [(await stock.stockOf(prod.id)).packs, (await stock.stockOf(prod.id)).looseUnits], [3, 5]);
+
+      await stock.consume(prod.id, 3);
+      const split = await stock.stockOf(prod.id);
+      eq('loose units split from packs', [split.packs, split.looseUnits], [3, 2]);
+      await fails('consume beyond stock fails', () => stock.consume(prod.id, 33), 'insufficientStock');
+      eq('failed consume changes nothing', await stockUnits(prod.id), 32);
+
+      // Expired stock is never sold.
+      const old = await products.createProduct({ name: 'Old Stock', code: 'OLD1', unitsPerPack: 10, soldAs: 'strip', salePricePerPack: 1000, costPerPack: 500 });
+      await stock.addBatch({ productId: old.id, batchNo: 'expired', expiry: isoIn(-5), packs: 2, costPerPack: 500 });
+      await stock.addBatch({ productId: old.id, batchNo: 'valid', expiry: isoIn(90), packs: 1, costPerPack: 500 });
+      await fails('expired batch units not sellable', () => stock.consume(old.id, 11), 'insufficientStock');
+      const oldSale = await stock.consume(old.id, 10);
+      eq('only the valid batch is allocated', oldSale.map((a) => a.batchNo), ['valid']);
+      eq('expired batch keeps its stock', await batchUnits(old.id, 'expired'), 20);
+      eq('expired batch is flagged', (await stock.batchStock(old.id)).find((b) => b.batchNo === 'expired').expired, true);
+
+      // Adjustments.
+      // After the consume of 25 and 3, batch B-A holds 2 units.
+      const batchA = (await stock.batchStock(prod.id)).find((b) => b.batchNo === 'B-A');
+      eq('batch B-A holds 2 units before adjusting', batchA.units, 2);
+      const adjusted = await stock.adjust({ batchId: batchA.batchId, units: -2, reason: 'Broken strip' });
+      eq('adjustment voucher type', adjusted.type, 'adjustment');
+      ok('adjustment voucher numbered ADJ', /^ADJ-\d{4}$/.test(adjusted.number));
+      eq('adjustment reduces stock', await stockUnits(prod.id), 30);
+      await fails('positive adjustment needs a batch', () => stock.adjust({ productId: prod.id, units: 4, reason: 'found' }), 'batchRequired');
+      await fails('adjustment beyond stock fails', () => stock.adjust({ productId: prod.id, units: -100, reason: 'x' }), 'insufficientStock');
+      await stock.adjust({ productId: prod.id, units: -2, reason: 'Counted short' });
+      eq('FEFO adjustment reduces stock', await stockUnits(prod.id), 28);
+      ok('ledger balances after adjustments', (await ledger.trialBalance()).balanced);
+
+      await stock.adjust({ productId: prod.id, units: -9, reason: 'Expired loose tablets' });
+      eq('stock after big write-off', await stockUnits(prod.id), 19);
+      const low = await stock.lowStock();
+      ok('low stock lists the product below reorder level', low.some((row) => row.product.id === prod.id));
+      ok('low stock ignores products with no reorder level', !low.some((row) => row.product.id === old.id));
+
+      const empty = await products.createProduct({ name: 'Nothing Yet', code: 'NIL1', unitsPerPack: 10, soldAs: 'strip' });
+      const oos = await stock.outOfStock();
+      ok('out of stock lists the product with no stock', oos.some((row) => row.product.id === empty.id));
+      ok('out of stock excludes products with stock', !oos.some((row) => row.product.id === prod.id));
+
+      const soon = await stock.expiringSoon(100);
+      ok('expiring soon includes expired stock still on the shelf', soon.some((row) => row.batchNo === 'expired'));
+      ok('expiring soon excludes batches far away', !soon.some((row) => row.batchNo === 'B-B'));
+
+      await fails('unitsPerPack cannot change with stock on hand', () => products.updateProduct(prod.id, { unitsPerPack: 12 }), 'unitsLocked');
+
+      // Integrity.
+      eq('integrity is clean before corruption', (await stock.checkIntegrity()).ok, true);
+      const victim = await db.get('batches', batchA.batchId);
+      await db.transaction((ctx) => {
+        ctx.put('batches', { ...victim, onHand: victim.onHand + 7 });
+      });
+      const report = await stock.checkIntegrity();
+      eq('integrity detects the corrupted batch', report.ok, false);
+      eq('integrity reports one mismatch', report.mismatches.length, 1);
+      eq('mismatch points at the batch', report.mismatches[0].batchId, batchA.batchId);
+      eq('mismatch shows cached minus computed', report.mismatches[0].cached - report.mismatches[0].computed, 7);
+      const fixed = await stock.recalculateStock();
+      eq('recalculate corrects one batch', fixed.corrected.length, 1);
+      eq('integrity clean after recalculate', (await stock.checkIntegrity()).ok, true);
+      eq('stock unchanged by recalculate', await stockUnits(prod.id), 19);
+    }
+
+    /* ---------- 3. ledger ---------- */
+
+    async function ledgerGroup() {
+      await fails('unbalanced entry rejected', () => ledger.postEntry({ docType: 'test', lines: [{ account: '1000', debit: 100 }, { account: '4000', credit: 99 }] }), 'unbalanced');
+      await fails('single-line entry rejected', () => ledger.postEntry({ docType: 'test', lines: [{ account: '1000', debit: 100 }, { account: '4000', credit: 0 }] }), 'ledgerNeedsTwoLines');
+      await fails('unknown account rejected', () => ledger.postEntry({ docType: 'test', lines: [{ account: '9999', debit: 100 }, { account: '1000', credit: 100 }] }), 'unknownAccount');
+      await fails('line with both sides rejected', () => ledger.postEntry({ docType: 'test', lines: [{ account: '1000', debit: 10, credit: 10 }, { account: '4000', credit: 0 }] }), 'lineBothSides');
+
+      const entryId = await ledger.postEntry({ docType: 'test', lines: [{ account: '1000', debit: 100 }, { account: '4000', credit: 100 }, { account: '4200', debit: 0, credit: 0 }] });
+      ok('zero lines are dropped, entry posted', typeof entryId === 'string');
+      eq('zero line wrote no ledger row', (await ledger.ledgerByAccount('4200')).length, 0);
+
+      const cust = await parties.createCustomer({ name: 'Ahmed Raza' });
+      const sup = await parties.createSupplier({ name: 'Sami Distributors' });
+      await ledger.openingBalance({ accountCode: '1100', amount: 50000, side: 'debit', partyId: cust.id });
+      eq('opening receivable for customer', await ledger.partyBalance(cust.id, '1100'), 50000);
+      await ledger.openingBalance({ accountCode: '2000', amount: 9000, side: 'credit', partyId: sup.id });
+      eq('opening payable for supplier is negative', await ledger.partyBalance(sup.id, '2000'), -9000);
+
+      const receipt = await ledger.receiptVoucher({ amount: 20000, partyId: cust.id });
+      eq('receipt voucher numbered RCV', receipt.number, 'RCV-0001');
+      eq('receipt reduces customer receivable', await ledger.partyBalance(cust.id, '1100'), 30000);
+      eq('receipt increases cash (with the 100 test posting)', (await ledger.accountBalance('1000')).balance, 20100);
+
+      const payment = await ledger.paymentVoucher({ amount: 4000, partyId: sup.id });
+      eq('payment voucher numbered PAY', payment.number, 'PAY-0001');
+      eq('payment reduces supplier payable', await ledger.partyBalance(sup.id, '2000'), -5000);
+
+      await ledger.createAccount({ code: '1010', name: 'Bank HBL', type: 'asset', normal: 'debit' });
+      await fails('duplicate account code rejected', () => ledger.createAccount({ code: '1010', name: 'Again', type: 'asset', normal: 'debit' }), 'accountExists');
+      const moved = await ledger.transfer({ amount: 6000, fromCode: '1000', toCode: '1010' });
+      eq('transfer voucher numbered TRF', moved.number, 'TRF-0001');
+      eq('transfer moves money into the bank', (await ledger.accountBalance('1010')).balance, 6000);
+
+      const cashRows = await ledger.ledgerByAccount('1000');
+      eq('ledger by account: running balance ends at the balance', cashRows[cashRows.length - 1].running, (await ledger.accountBalance('1000')).balance);
+      eq('equity holds the opening entries', (await ledger.accountBalance('3000')).balance, -41000);
+      eq('whole book balances', (await ledger.trialBalance()).balanced, true);
+      await fails('receipt from unknown customer rejected', () => ledger.receiptVoucher({ amount: 100, partyId: 'nobody' }), 'notFound');
+    }
+
+    /* ---------- 4. sales ---------- */
+
+    async function salesGroup() {
+      const pan = await products.createProduct({
+        name: 'Panadol 500mg', generic: 'Paracetamol', barcode: '890100', code: 'PAN500', soldAs: 'strip', unitsPerPack: 10,
+        looseSelling: true, looseUnitPrice: 450, costPerPack: 2000, salePricePerPack: 4000,
+      });
+      await stock.addBatch({ productId: pan.id, batchNo: 'B-C', expiry: monthYear(0), packs: 1, costPerPack: 2000, mrp: 4000 });
+      await stock.addBatch({ productId: pan.id, batchNo: 'B-A', expiry: isoIn(60), packs: 2, costPerPack: 2000, mrp: 4000 });
+      await stock.addBatch({ productId: pan.id, batchNo: 'B-B', expiry: isoIn(120), packs: 3, costPerPack: 2000, mrp: 4000 });
+
+      // FEFO across three batches, full cash payment.
+      const s1 = await sales.createSale({ customer: null, items: [{ productId: pan.id, packs: 2 }], payments: [{ method: 'cash', amount: 8000 }] });
+      eq('first sale numbered SALE-0001', s1.number, 'SALE-0001');
+      const s1Full = await sales.getSaleWithItems(s1.id);
+      eq('sale allocations follow FEFO', s1Full.items[0].allocations.map((a) => a.batchNo), ['B-C', 'B-A']);
+      eq('sale allocation units', s1Full.items[0].allocations.map((a) => a.units), [10, 10]);
+      eq('sale cost from the batches', s1.cost, 4000);
+      eq('sale profit = net sale − cost', s1.profit, 4000);
+      eq('stock after sale', await stockUnits(pan.id), 40);
+
+      // Loose tablets from a strip.
+      const loose = await products.createProduct({ name: 'Disprin', code: 'DIS1', soldAs: 'strip', unitsPerPack: 10, looseSelling: true, looseUnitPrice: 450, costPerPack: 2000, salePricePerPack: 4000 });
+      await stock.addBatch({ productId: loose.id, batchNo: 'D1', expiry: isoIn(200), packs: 1, costPerPack: 2000 });
+      const s2 = await sales.createSale({ items: [{ productId: loose.id, looseUnits: 3 }], payments: [{ method: 'cash', amount: 1350 }] });
+      eq('loose sale amount = units × loose price', s2.subtotal, 1350);
+      eq('loose sale takes 3 units from the strip', s2.items[0].units, 3);
+      eq('loose sale cost is pro-rata', s2.cost, 600);
+      eq('loose sale leaves 7 loose tablets', [(await stock.stockOf(loose.id)).packs, (await stock.stockOf(loose.id)).looseUnits], [0, 7]);
+      const stripOnly = await products.createProduct({ name: 'Strip Only', code: 'SO1', soldAs: 'strip', unitsPerPack: 10, costPerPack: 500, salePricePerPack: 1000 });
+      await fails('loose sale rejected when the product does not sell loose', () => sales.createSale({ items: [{ productId: stripOnly.id, looseUnits: 1 }], payments: [{ method: 'cash', amount: 100 }] }), 'looseNotAllowed');
+
+      // Partial payment on udhaar.
+      const cust = await parties.createCustomer({ name: 'Ali Khan', phone: '0300' });
+      const s3 = await sales.createSale({ customer: cust.id, items: [{ productId: pan.id, packs: 2 }], payments: [{ method: 'cash', amount: 3000 }] });
+      eq('partial payment: balance on the sale', s3.balance, 5000);
+      eq('partial payment: customer owes the balance', await ledger.partyBalance(cust.id, '1100'), 5000);
+      await fails('walk-in customer cannot buy on credit', () => sales.createSale({ items: [{ productId: pan.id, packs: 1 }], payments: [{ method: 'cash', amount: 1000 }] }), 'walkInCredit');
+      await fails('overpayment rejected', () => sales.createSale({ items: [{ productId: pan.id, packs: 1 }], payments: [{ method: 'cash', amount: 5000 }] }), 'overpaid');
+
+      // Atomic: a sale that cannot be fully allocated leaves nothing behind.
+      const beforeSales = await db.count('sales');
+      const beforeOutbox = await db.count('outbox');
+      const beforeStock = await stockUnits(pan.id);
+      await fails('oversell fails cleanly', () => sales.createSale({ items: [{ productId: pan.id, packs: 100 }], payments: [{ method: 'cash', amount: 400000 }] }), 'insufficientStock');
+      eq('failed sale: no sale row written', await db.count('sales'), beforeSales);
+      eq('failed sale: no outbox row written', await db.count('outbox'), beforeOutbox);
+      eq('failed sale: stock untouched', await stockUnits(pan.id), beforeStock);
+
+      // Rx needs patient and doctor, unless the setting says otherwise.
+      const rx = await products.createProduct({ name: 'Ciproxin', code: 'CIP1', class: 'rx', soldAs: 'strip', unitsPerPack: 10, costPerPack: 7000, salePricePerPack: 9500 });
+      await stock.addBatch({ productId: rx.id, batchNo: 'R1', expiry: isoIn(200), packs: 2, costPerPack: 7000 });
+      await fails('Rx sale needs patient and doctor', () => sales.createSale({ items: [{ productId: rx.id, packs: 1 }], payments: [{ method: 'cash', amount: 9500 }] }), 'patientDoctorRequired');
+      const rxSale = await sales.createSale({ items: [{ productId: rx.id, packs: 1 }], payments: [{ method: 'cash', amount: 9500 }], patient: 'Sara', doctor: 'Dr. Ahmed' });
+      eq('Rx sale keeps patient and doctor', [rxSale.patient, rxSale.doctor], ['Sara', 'Dr. Ahmed']);
+      await settings.saveSettings({ rxRequiresPatientDoctor: false });
+      const rxFree = await sales.createSale({ items: [{ productId: rx.id, packs: 1 }], payments: [{ method: 'cash', amount: 9500 }] });
+      ok('Rx sale without details allowed when setting is off', rxFree.total === 9500);
+      await settings.saveSettings({ rxRequiresPatientDoctor: true });
+
+      // Discount, tax and profit.
+      const s4 = await sales.createSale({ items: [{ productId: pan.id, packs: 2 }], discount: 500, tax: 200, payments: [{ method: 'cash', amount: 7700 }] });
+      eq('total = subtotal − discount + tax', s4.total, 7700);
+      eq('profit = (total − tax) − cost', s4.profit, 3500);
+      eq('tax liability recorded', (await ledger.accountBalance('2100')).balance, -200);
+      await fails('discount above subtotal rejected', () => sales.createSale({ items: [{ productId: pan.id, packs: 1 }], discount: 999999, payments: [{ method: 'cash', amount: 1 }] }), 'discountTooLarge');
+
+      // Expired batches are never sold.
+      const exp = await products.createProduct({ name: 'Expiring Syrup', code: 'EXP1', soldAs: 'bottle', unitsPerPack: 10, costPerPack: 1000, salePricePerPack: 1500 });
+      await stock.addBatch({ productId: exp.id, batchNo: 'gone', expiry: isoIn(-3), packs: 2, costPerPack: 1000 });
+      await stock.addBatch({ productId: exp.id, batchNo: 'fresh', expiry: isoIn(90), packs: 1, costPerPack: 1000 });
+      await fails('sale cannot dip into expired stock', () => sales.createSale({ items: [{ productId: exp.id, packs: 2 }], payments: [{ method: 'cash', amount: 3000 }] }), 'insufficientStock');
+      const s5 = await sales.createSale({ items: [{ productId: exp.id, packs: 1 }], payments: [{ method: 'cash', amount: 1500 }] });
+      eq('sale draws only the fresh batch', (await sales.getSaleWithItems(s5.id)).items[0].allocations.map((a) => a.batchNo), ['fresh']);
+      eq('expired batch still holds its units', await batchUnits(exp.id, 'gone'), 20);
+
+      // Hold and resume.
+      const heldId = await sales.holdCart({ customer: null, items: [{ productId: pan.id, packs: 1 }], note: 'customer is checking price' });
+      eq('one cart on hold', (await sales.listHeldCarts()).length, 1);
+      const resumed = await sales.resumeCart(heldId);
+      eq('resumed cart keeps its items', resumed.items, [{ productId: pan.id, packs: 1, looseUnits: 0 }]);
+      eq('resume removes the cart from hold', (await sales.listHeldCarts()).length, 0);
+      await fails('resuming twice fails', () => sales.resumeCart(heldId), 'notFound');
+
+      // Restock for the void and numbering checks below.
+      await stock.addBatch({ productId: pan.id, batchNo: 'B-D', expiry: isoIn(200), packs: 10, costPerPack: 2000, mrp: 4000 });
+
+      // Void rules.
+      const before = await stockUnits(pan.id);
+      const owed = await ledger.partyBalance(cust.id, '1100');
+      const s6 = await sales.createSale({ customer: cust.id, items: [{ productId: pan.id, packs: 1 }], payments: [] });
+      eq('credit sale adds the full total to the customer', await ledger.partyBalance(cust.id, '1100'), owed + 4000);
+      await fails('void not allowed on a different day', () => sales.voidSale(s5.id, { today: isoIn(1) }), 'voidNotSameDay');
+      const voided = await sales.voidSale(s6.id, { reason: 'entry error' });
+      eq('void marks the sale', voided.status, 'void');
+      eq('void restores stock', await stockUnits(pan.id), before);
+      eq('void reverses the customer balance', await ledger.partyBalance(cust.id, '1100'), owed);
+      await fails('void twice fails', () => sales.voidSale(s6.id), 'alreadyVoid');
+
+      // Numbering: no gaps after a failed sale; device prefix option.
+      const n = (await db.count('sales')) + 1;
+      const next = await sales.createSale({ items: [{ productId: pan.id, packs: 1 }], payments: [{ method: 'cash', amount: 4000 }] });
+      eq('no gap in numbering after failures and voids', next.number, `SALE-${String(n).padStart(4, '0')}`);
+      await settings.saveSettings({ devicePrefix: 'K1' });
+      const prefixed = await sales.createSale({ items: [{ productId: pan.id, packs: 1 }], payments: [{ method: 'cash', amount: 4000 }] });
+      ok('device prefix appears in the number', /^SALE-K1-\d{4}$/.test(prefixed.number));
+      await settings.saveSettings({ devicePrefix: '' });
+
+      eq('whole book balances after sales', (await ledger.trialBalance()).balanced, true);
+    }
+
+    /* ---------- 5. purchases ---------- */
+
+    async function purchasesGroup() {
+      const prod = await products.createProduct({ name: 'Vitamin C 500', code: 'VC500', soldAs: 'strip', unitsPerPack: 10, costPerPack: 2000, salePricePerPack: 4000 });
+      const sup = await parties.createSupplier({ name: 'Metro Wholesale' });
+
+      const p1 = await purchases.createPurchase({
+        supplierId: sup.id,
+        items: [{ productId: prod.id, batchNo: 'PB1', expiry: monthYear(12), packs: 5, costPerPack: 2500, mrp: 4500 }],
+        paid: 12500,
+      });
+      eq('purchase numbered PUR-0001', p1.number, 'PUR-0001');
+      eq('purchase total', p1.total, 12500);
+      eq('purchase fully paid: no balance', p1.balance, 0);
+      eq('purchase adds 50 units', await stockUnits(prod.id), 50);
+      const after1 = await products.getProduct(prod.id);
+      eq('cost updated from latest purchase', after1.costPerPack, 2500);
+      eq('sale price follows the new MRP', after1.salePricePerPack, 4500);
+      const batch = (await stock.batchStock(prod.id))[0];
+      eq('purchase batch expiry is end of the MM/YY month', batch.expiry, monthEndIso(12));
+
+      const p2 = await purchases.createPurchase({
+        supplierId: sup.id,
+        items: [{ productId: prod.id, batchNo: 'PB2', expiry: monthYear(14), packs: 2, costPerPack: 2500, mrp: 4500 }],
+        paid: 2000,
+      });
+      eq('credit purchase balance', p2.balance, 3000);
+      eq('credit purchase raises supplier payable', await ledger.partyBalance(sup.id, '2000'), -3000);
+      await fails('credit purchase needs a supplier', () => purchases.createPurchase({ items: [{ productId: prod.id, batchNo: 'X', expiry: monthYear(12), packs: 1, costPerPack: 100 }], paid: 0 }), 'supplierRequiredForCredit');
+      await fails('expired stock refused at purchase', () => purchases.createPurchase({ items: [{ productId: prod.id, batchNo: 'OLD', expiry: monthYear(-1), packs: 1, costPerPack: 100 }], paid: 100 }), 'expiredBatch');
+      await fails('bad expiry text refused', () => purchases.createPurchase({ items: [{ productId: prod.id, batchNo: 'BAD', expiry: 'xx', packs: 1, costPerPack: 100 }], paid: 100 }), 'invalidField');
+
+      await settings.saveSettings({ updateSalePriceOnMrpChange: false, updateCostFromLastPurchase: false });
+      await purchases.createPurchase({ items: [{ productId: prod.id, batchNo: 'PB3', expiry: monthYear(12), packs: 1, costPerPack: 1000, mrp: 9999 }], paid: 1000 });
+      const frozen = await products.getProduct(prod.id);
+      eq('settings off: price and cost unchanged', [frozen.salePricePerPack, frozen.costPerPack], [4500, 2500]);
+      await settings.saveSettings({ updateSalePriceOnMrpChange: true, updateCostFromLastPurchase: true });
+
+      eq('whole book balances after purchases', (await ledger.trialBalance()).balanced, true);
+    }
+
+    /* ---------- 6. returns ---------- */
+
+    async function returnsGroup() {
+      const prod = await products.createProduct({ name: 'Flagyl 400', code: 'FLG400', soldAs: 'strip', unitsPerPack: 10, costPerPack: 2000, salePricePerPack: 4000 });
+      await stock.addBatch({ productId: prod.id, batchNo: 'C1', expiry: monthYear(0), packs: 1, costPerPack: 2000 });
+      await stock.addBatch({ productId: prod.id, batchNo: 'A1', expiry: isoIn(60), packs: 2, costPerPack: 2000 });
+      await stock.addBatch({ productId: prod.id, batchNo: 'B1', expiry: isoIn(120), packs: 3, costPerPack: 2000 });
+      const cust = await parties.createCustomer({ name: 'Bilal Ahmed' });
+
+      // Sale return restores the right batches.
+      const s1 = await sales.createSale({ customer: cust.id, items: [{ productId: prod.id, packs: 2 }], payments: [] });
+      const item = (await sales.getSaleWithItems(s1.id)).items[0];
+      eq('sale took C1 then A1', item.allocations.map((a) => a.batchNo), ['C1', 'A1']);
+
+      const r1 = await returns.createSaleReturn({ saleId: s1.id, items: [{ saleItemId: item.id, units: 15 }], refund: 0 });
+      eq('return numbered SRN-0001', r1.number, 'SRN-0001');
+      eq('return value is the share of the sale', r1.gross, 6000);
+      eq('return restores C1 (its 10 units)', await batchUnits(prod.id, 'C1'), 10);
+      eq('return restores A1 (the remaining 5 units)', await batchUnits(prod.id, 'A1'), 15);
+      eq('return leaves B1 alone', await batchUnits(prod.id, 'B1'), 30);
+      eq('no refund: customer owes the rest', await ledger.partyBalance(cust.id, '1100'), 2000);
+      eq('partial return marks the sale', (await sales.getSale(s1.id)).status, 'partially_returned');
+
+      await fails('cannot return more than was sold', () => returns.createSaleReturn({ saleId: s1.id, items: [{ saleItemId: item.id, units: 6 }], refund: 0 }), 'returnExceedsSold');
+      await fails('refund cannot exceed the returned value', () => returns.createSaleReturn({ saleId: s1.id, items: [{ saleItemId: item.id, units: 5 }], refund: 2500 }), 'refundExceedsReturn');
+      await fails('sale with returns cannot be voided', () => sales.voidSale(s1.id, { today: today }), 'hasReturns');
+
+      const r2 = await returns.createSaleReturn({ saleId: s1.id, items: [{ saleItemId: item.id, units: 5 }], refund: 2000 });
+      eq('second return numbered SRN-0002 (failed attempts left no gap)', r2.number, 'SRN-0002');
+      eq('refunded return leaves customer balance unchanged', await ledger.partyBalance(cust.id, '1100'), 2000);
+      eq('fully returned sale is marked returned', (await sales.getSale(s1.id)).status, 'returned');
+
+      // Walk-in sale returns must be refunded in full.
+      const walk = await sales.createSale({ items: [{ productId: prod.id, packs: 1 }], payments: [{ method: 'cash', amount: 4000 }] });
+      const walkItem = (await sales.getSaleWithItems(walk.id)).items[0];
+      await fails('walk-in return must refund the full value', () => returns.createSaleReturn({ saleId: walk.id, items: [{ saleItemId: walkItem.id, units: 10 }], refund: 1000 }), 'walkInRefundMustMatch');
+      const walkReturn = await returns.createSaleReturn({ saleId: walk.id, items: [{ saleItemId: walkItem.id, units: 10 }], refund: 4000 });
+      eq('walk-in return refunded in full', walkReturn.refund, 4000);
+
+      // Purchase return takes stock out of the right batch.
+      const sup = await parties.createSupplier({ name: 'Care Pharma' });
+      const p1 = await purchases.createPurchase({
+        supplierId: sup.id,
+        items: [{ productId: prod.id, batchNo: 'PBX', expiry: isoIn(90), packs: 4, costPerPack: 2000, mrp: 4000 }],
+        paid: 0,
+      });
+      const pItem = (await purchases.getPurchaseWithItems(p1.id)).items[0];
+      eq('purchase batch holds 40 units', await batchUnits(prod.id, 'PBX'), 40);
+
+      const pr1 = await returns.createPurchaseReturn({ purchaseId: p1.id, items: [{ purchaseItemId: pItem.id, packs: 1 }], refund: 0 });
+      eq('purchase return numbered PRN-0001', pr1.number, 'PRN-0001');
+      eq('purchase return removes 10 units from PBX', await batchUnits(prod.id, 'PBX'), 30);
+      eq('purchase return value = packs × cost', pr1.gross, 2000);
+      eq('purchase return reduces supplier payable', await ledger.partyBalance(sup.id, '2000'), -6000);
+      await fails('cannot return more packs than bought', () => returns.createPurchaseReturn({ purchaseId: p1.id, items: [{ purchaseItemId: pItem.id, packs: 4 }], refund: 0 }), 'returnExceedsBought');
+
+      // Expired stock can go back to the supplier.
+      // Simulates time passing: the batch's expiry is now in the past.
+      await db.transaction(async (ctx) => {
+        const row = await ctx.get('batches', pItem.batchId);
+        ctx.put('batches', { ...row, expiry: isoIn(-10) });
+      });
+      await returns.createPurchaseReturn({ purchaseId: p1.id, items: [{ purchaseItemId: pItem.id, packs: 1 }], refund: 0 });
+      eq('expired batch returned to supplier', await batchUnits(prod.id, 'PBX'), 20);
+
+      // A batch that has been sold through cannot be returned.
+      const gone = await products.createProduct({ name: 'Sold Out', code: 'SLD1', soldAs: 'strip', unitsPerPack: 10, costPerPack: 1000, salePricePerPack: 1500 });
+      const p2 = await purchases.createPurchase({ supplierId: sup.id, items: [{ productId: gone.id, batchNo: 'G1', expiry: isoIn(200), packs: 1, costPerPack: 1000, mrp: 1500 }], paid: 1000 });
+      const gItem = (await purchases.getPurchaseWithItems(p2.id)).items[0];
+      await sales.createSale({ items: [{ productId: gone.id, packs: 1 }], payments: [{ method: 'cash', amount: 1500 }] });
+      await fails('purchase return from a sold-out batch fails', () => returns.createPurchaseReturn({ purchaseId: p2.id, items: [{ purchaseItemId: gItem.id, packs: 1 }], refund: 0 }), 'insufficientStock');
+
+      // Walk-in purchase returns are refunded in full.
+      const p3 = await purchases.createPurchase({ items: [{ productId: prod.id, batchNo: 'WALK', expiry: isoIn(200), packs: 1, costPerPack: 2000, mrp: 4000 }], paid: 2000 });
+      const wItem = (await purchases.getPurchaseWithItems(p3.id)).items[0];
+      await fails('walk-in purchase return must refund the full value', () => returns.createPurchaseReturn({ purchaseId: p3.id, items: [{ purchaseItemId: wItem.id, packs: 1 }], refund: 500 }), 'walkInRefundMustMatch');
+
+      eq('whole book balances after returns', (await ledger.trialBalance()).balanced, true);
+    }
+
+    /* ---------- 7. demand ---------- */
+
+    async function demandGroup() {
+      const prod = await products.createProduct({ name: 'Cetamol Syrup', code: 'CET1', soldAs: 'bottle', unitsPerPack: 1, salePricePerPack: 300 });
+      const first = await demand.addManual(prod.id, 2, 'before Friday');
+      await demand.addManual(prod.id, 5);
+      const open = await demand.listOpen();
+      eq('manual add merges into one open row', open.length, 1);
+      eq('merged row keeps the larger quantity', open[0].packs, 5);
+      eq('manual row reason', open[0].reason, 'manual');
+      ok('first row id is reused', open[0].id === first.id);
+
+      const miss = await demand.noteSearchMiss('Brufen 400');
+      eq('search miss recorded as not_found', miss.reason, 'not_found');
+      await demand.noteSearchMiss('  brufen 400 ');
+      eq('same missed name not duplicated', (await demand.listOpen()).length, 2);
+      eq('blank search miss ignored', await demand.noteSearchMiss('   '), null);
+
+      const low = await products.createProduct({ name: 'Low Item', code: 'LOW1', soldAs: 'strip', unitsPerPack: 10, reorderLevel: 3, reorderQty: 6, costPerPack: 500, salePricePerPack: 800 });
+      await stock.addBatch({ productId: low.id, batchNo: 'L1', expiry: isoIn(200), packs: 1, costPerPack: 500 });
+      eq('auto add picks up low stock once', await demand.autoAddLowStock(), 1);
+      eq('second auto add adds nothing', await demand.autoAddLowStock(), 0);
+      const lowRow = (await demand.listOpen()).find((row) => row.productId === low.id);
+      eq('low stock row uses the reorder quantity', [lowRow.reason, lowRow.packs], ['low_stock', 6]);
+
+      await demand.markOrdered(lowRow.id);
+      ok('ordered row leaves the open list', !(await demand.listOpen()).some((row) => row.id === lowRow.id));
+
+      const text = await demand.toWhatsAppText({ pharmacyName: 'Al Rehman Pharmacy', date: '2026-10-29' });
+      ok('WhatsApp text has the header', text.startsWith('Order list for Al Rehman Pharmacy (2026-10-29)'));
+      ok('WhatsApp text lists the manual item with packs', text.includes('Cetamol Syrup — 5 pack(s)'));
+      ok('WhatsApp text lists the missed name', text.includes('Brufen 400 — 1 pack(s)'));
+      const link = demand.whatsappLink('a b\nc', '0300-1234567');
+      eq('WhatsApp link: digits only, text encoded', link, 'https://wa.me/03001234567?text=a%20b%0Ac');
+
+      const remaining = await demand.listOpen();
+      await demand.removeDemand(remaining[0].id);
+      eq('removed row leaves the list', (await demand.listOpen()).length, remaining.length - 1);
+    }
+
+    /* ---------- runner ---------- */
+
+    const groups = [
+      ['products', productsGroup],
+      ['stock and FEFO', stockGroup],
+      ['ledger', ledgerGroup],
+      ['sales', salesGroup],
+      ['purchases', purchasesGroup],
+      ['returns', returnsGroup],
+      ['demand list', demandGroup],
+    ];
+
+    const list = document.getElementById('results');
+    const summary = document.getElementById('summary');
+
+    (async () => {
+      const report = [];
+      for (const [name, fn] of groups) {
+        current = name;
+        const before = failures.length;
+        const beforeAssertions = assertions;
+        try {
+          await resetDb();
+          await fn();
+        } catch (err) {
+          failures.push(`threw an unexpected error: ${err.code ?? ''} ${err.message}`);
+          console.error(name, err);
+        }
+        const groupFailures = failures.slice(before);
+        report.push({ name, count: assertions - beforeAssertions, failed: groupFailures });
+      }
+
+      for (const row of report) {
+        const li = document.createElement('li');
+        const status = row.failed.length ? '<span class="fail">FAIL</span>' : '<span class="pass">PASS</span>';
+        li.innerHTML = `${status} ${row.name} (${row.count} assertions)`;
+        if (row.failed.length) {
+          const detail = document.createElement('pre');
+          detail.className = 'detail';
+          detail.textContent = row.failed.join('\n');
+          li.appendChild(detail);
+        }
+        list.appendChild(li);
+      }
+
+      const failedCount = failures.length;
+      summary.textContent = `${assertions} assertions, ${failedCount} failed`;
+      window.__servicesTest = { assertions, failed: failedCount, failures };
+      await db.destroyDatabase();
+    })();
+  </script>
+</body>
+</html>
