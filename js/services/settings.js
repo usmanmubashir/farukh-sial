@@ -23,6 +23,23 @@ export const DEFAULT_SETTINGS = {
   receiptShowDirections: true,
   /** Optional per-device prefix, so two devices never issue the same document number. */
   devicePrefix: '',
+  /** Sales tax: when on, the sale screen adds taxRate percent of the net amount unless a tax is typed. */
+  taxEnabled: false,
+  taxRate: 0,
+  /** Low-stock orders suggest enough packs for this many days of sales. */
+  orderDays: 30,
+  /** Owner session length, in hours. An expired session asks for the password again once online. */
+  sessionHours: 24,
+  /** Remind the owner to take a backup after this many days (0 turns the reminder off). */
+  backupReminderDays: 7,
+  /** 'browser' (print dialog) or 'bluetooth' (ESC/POS printer). */
+  printMethod: 'browser',
+  /** Copies of each receipt. */
+  printCopies: 1,
+  /** Open the print dialog (or send to the printer) as soon as a sale completes. */
+  printAutoPrint: false,
+  /** 'western' (0–9, default) or 'urdu' (۰–۹) for displayed numbers. */
+  numberDigits: 'western',
   docPrefixes: {
     sale: 'SALE',
     purchase: 'PUR',
@@ -36,6 +53,36 @@ export const DEFAULT_SETTINGS = {
     income: 'INC',
   },
 };
+
+/** Pharmacy profile, printed on receipts and reports. Stored under the key 'profile'. */
+export const DEFAULT_PROFILE = {
+  name: '',
+  nameUr: '',
+  address: '',
+  phone: '',
+  ntn: '',
+  licence: '',
+  qualifiedPerson: '',
+  receiptFooter: '',
+  currency: 'PKR',
+};
+
+export async function getProfile() {
+  return { ...DEFAULT_PROFILE, ...(await db.getSetting('profile', {})) };
+}
+
+/** Saves the profile. The name is kept in sync with the 'pharmacyName' setting the rest of the app reads. */
+export function saveProfile(patch) {
+  return db.transaction(async (ctx) => {
+    const row = await ctx.get('settings', 'profile');
+    const next = { ...DEFAULT_PROFILE, ...(row?.value ?? {}), ...patch };
+    for (const field of Object.keys(DEFAULT_PROFILE)) next[field] = String(next[field] ?? '').trim();
+    if (!next.name) next.name = (await ctx.get('settings', 'pharmacyName'))?.value ?? '';
+    ctx.put('settings', { key: 'profile', value: next });
+    ctx.put('settings', { key: 'pharmacyName', value: next.name });
+    return next;
+  });
+}
 
 export function mergeSettings(stored = {}) {
   return {

@@ -42,7 +42,7 @@ Every write goes through `db.transaction()`, which also queues synced rows in `o
 | ledgerEntries | id | accountDate[accountId, date], date, doc[docType, docId] | yes | One row per line: `entryId`, `accountCode`, `partyId`, `debit`, `credit`, `docType`, `docId`, `memo` |
 | vouchers | id | date, number (unique) | yes | `type`: receipt (RCV), payment (PAY), expense (EXP), income (INC), transfer (TRF), adjustment (ADJ). Each has `amount`, `entryId`, `note`, and the accounts it used (`accountCode` and `fromCode`/`toCode`, or `partyId` for receipts and payments) |
 | demandList | id | productId, status | yes | `name`, `nameKey`, `packs`, `reason` (low_stock, not_found, manual), `status` (open, ordered), `note`, `supplierId` (preferred supplier, optional; set from the order list) |
-| settings | key | — | no | `{ key, value }`. Keys: `pharmacyName`, `deviceId`, `session`, `business` (business rules), `heldCarts` (parked carts). Business rules that the sale screen reads: `rxRequiresPatientDoctor` (true), `voidSameDayOnly` (true), `allowPriceEdit` (true), `receiptWidth` (80 or 58 mm), `receiptShowBatch` (false), `receiptShowDirections` (true), `devicePrefix`, `productGroups`. Document prefixes (`docPrefixes`): SALE, PUR, SRN, PRN, RCV, PAY, EXP, INC, TRF, ADJ |
+| settings | key | — | no | `{ key, value }`. Keys: `business` (business rules: the sale, purchase, printing, tax, session, backup reminder and document settings), `profile` (pharmacy profile: name, Urdu name, address, phone, NTN, licence, qualified person, receipt footer, currency), `pharmacyName` (kept equal to the profile name), `closing.<date>` (counted cash on the daily closing, in paisa), `rollups` (version of the report rollups). Device-only keys, never in a backup: `deviceId`, `session`, `lastBackupAt` |
 | counters | key | — | no | `{ key, value }`. Last issued number per sequence |
 | syncState | key | — | no | Sync cursor and adapter state |
 | dailySales | date | — | no | Rollup, one row per day: `invoices`, `subtotal`, `discount`, `tax`, `total`, `cost`, `profit`, `cash`, `bank`, `credit`. Live sales only |
@@ -52,6 +52,8 @@ Every write goes through `db.transaction()`, which also queues synced rows in `o
 | users | id | username (unique) | no | Owner account: `{ id: 'owner', username, salt, hash, iterations }` |
 
 Every synced row also carries `updatedAt` (ISO timestamp), added automatically by `ctx.put`.
+
+**Backup file.** One JSON document (gzip-compressed when the browser supports it): `format` (`shifa-pos-backup`), `schemaVersion` (the database version, which must match on restore), `app`, `createdAt`, `deviceId` (where it was made), `counts` (records per store), `checksum` (SHA-256 of the `stores` part as written), and `stores` (every store except `users` and `outbox`, with the device-only settings left out). No password is ever in a backup. Restore checks the format, the schema version and the checksum before it changes anything, then replaces the stores in one transaction.
 
 **Rollups.** The three rollup stores are derived data. Every sale, void and cash posting updates them in the same transaction as the business write (`services/rollups.js`), so they cannot drift from the sales. `rebuildRollups()` recomputes them from the source rows in one transaction. The first report run builds them when the `settings` row `rollups` is missing (once per database). They are device-local and never synced.
 

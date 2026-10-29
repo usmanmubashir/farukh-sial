@@ -4,7 +4,8 @@
 //      (Noto Nastaliq) prints correctly, then sent as a 1-bit raster image.
 // The Bluetooth path needs Chrome or Edge on a secure origin, and a printer that exposes a writable GATT
 // characteristic. It has not been tested against real hardware in this build.
-import { receiptHtml } from './receipt.js';
+import { t } from '../core/i18n.js';
+import { headerLines, receiptHtml } from './receipt.js';
 
 const CANDIDATE_SERVICES = [0x18f0, 0xff00, 0xffe0, 0xfff0, 0x180a, 0x1801];
 const CHUNK = 120;
@@ -36,14 +37,47 @@ function printArea(html, attributes) {
   window.print();
 }
 
-/** Prints the receipt through the browser's print dialog. */
-export function printInBrowser(model) {
-  printArea(receiptHtml(model), { width: String(model.width) });
+/** Prints the receipt through the browser's print dialog. copies repeats it on the same print job. */
+export function printInBrowser(model, { copies = 1 } = {}) {
+  const one = receiptHtml(model);
+  const html = Array.from({ length: Math.max(1, copies) }, () => `<div class="receipt-copy">${one}</div>`).join('');
+  printArea(html, { width: String(model.width) });
 }
 
 /** Prints a page document (registers, reports). `size` is 'a4' (the default) and sets the layout in print.css. */
 export function printPage(html, { size = 'a4' } = {}) {
   printArea(html, { page: size });
+}
+
+/** A receipt with Urdu and English text, for test prints. Built from the given width. */
+export function sampleReceipt(width = 80) {
+  return {
+    pharmacyName: t('rcpt.sampleName'),
+    pharmacyNameUr: 'الرحمن فارمیسی',
+    address: 'مین بازار، لاہور',
+    phone: '0300-0000000',
+    ntn: '1234567-8',
+    licence: 'DL-000/000',
+    footer: t('rcpt.sampleFooter'),
+    number: 'TEST-0001',
+    date: '01/01/2026',
+    customer: '',
+    patient: '',
+    doctor: '',
+    items: [
+      { name: 'Panadol', strength: '500mg', qty: '2 strip', amount: '80.00', batches: 'PN-1 12/27', directions: t('rcpt.sampleDirections'), rx: false },
+      { name: 'Augmentin', strength: '625mg', qty: '1 strip', amount: '1,450.00', batches: '', directions: '', rx: true },
+    ],
+    subtotal: '1,530.00',
+    discount: '',
+    tax: '',
+    total: '1,530.00',
+    paid: '1,530.00',
+    balance: '',
+    change: '',
+    note: '',
+    width: Number(width) === 58 ? 58 : 80,
+  };
 }
 
 /** Asks for a printer, then keeps the writable characteristic for later prints. */
@@ -101,26 +135,28 @@ export async function renderReceiptCanvas(model) {
   const lineHeight = 30;
   const lines = [];
   const push = (text, opts = {}) => lines.push({ text: String(text ?? ''), ...opts });
-  push(model.pharmacyName, { center: true, bold: true, size: 26 });
+  const rule = '-'.repeat(dots > 400 ? 46 : 30);
+  headerLines(model).forEach((text, i) => push(text, { center: true, bold: i === 0, size: i === 0 ? 26 : 22 }));
   push(`${model.number}   ${model.date}`);
-  if (model.customer) push(`Customer: ${model.customer}`);
-  if (model.patient) push(`Patient: ${model.patient}`);
-  if (model.doctor) push(`Doctor: ${model.doctor}`);
-  push('-'.repeat(dots > 400 ? 46 : 30));
+  if (model.customer) push(`${t('rcpt.customer')}: ${model.customer}`);
+  if (model.patient) push(`${t('rcpt.patient')}: ${model.patient}`);
+  if (model.doctor) push(`${t('rcpt.doctor')}: ${model.doctor}`);
+  push(rule);
   for (const item of model.items) {
     push(`${item.name} ${item.strength}`.trim(), { bold: true });
     push(`${item.qty}   ${item.amount}`);
-    if (item.batches) push(`Batch: ${item.batches}`, { size: 20 });
+    if (item.batches) push(`${t('rcpt.batch')}: ${item.batches}`, { size: 20 });
     if (item.directions) push(item.directions, { size: 20 });
   }
-  push('-'.repeat(dots > 400 ? 46 : 30));
-  if (model.discount) push(`Discount: ${model.discount}`);
-  if (model.tax) push(`Tax: ${model.tax}`);
-  push(`Total: ${model.total}`, { bold: true });
-  push(`Paid: ${model.paid}`);
-  if (model.balance) push(`Balance on account: ${model.balance}`);
-  if (model.change) push(`Change: ${model.change}`);
-  push('Thank you', { center: true });
+  push(rule);
+  if (model.discount) push(`${t('rcpt.discount')}: ${model.discount}`);
+  if (model.tax) push(`${t('rcpt.tax')}: ${model.tax}`);
+  push(`${t('rcpt.total')}: ${model.total}`, { bold: true });
+  push(`${t('rcpt.paid')}: ${model.paid}`);
+  if (model.balance) push(`${t('rcpt.balance')}: ${model.balance}`);
+  if (model.change) push(`${t('rcpt.change')}: ${model.change}`);
+  if (model.footer) push(model.footer, { center: true, size: 20 });
+  push(t('rcpt.thanks'), { center: true });
 
   const canvas = document.createElement('canvas');
   canvas.width = dots;
@@ -183,11 +219,14 @@ export function canvasToRaster(canvas) {
   return out;
 }
 
-/** Prints the receipt on the connected Bluetooth printer. */
-export async function printToBluetooth(model) {
+/** Prints the receipt on the connected Bluetooth printer, copies times. */
+export async function printToBluetooth(model, { copies = 1 } = {}) {
   const canvas = await renderReceiptCanvas(model);
   const init = [0x1b, 0x40];
   const feed = [0x0a, 0x0a, 0x0a];
   const cut = [0x1d, 0x56, 0x42, 0x00];
-  await send(new Uint8Array([...init, ...canvasToRaster(canvas), ...feed, ...cut]));
+  const one = [...canvasToRaster(canvas), ...feed, ...cut];
+  for (let i = 0; i < Math.max(1, copies); i += 1) {
+    await send(new Uint8Array([...init, ...one]));
+  }
 }

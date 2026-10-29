@@ -135,6 +135,35 @@ export function useDatabase(name) {
   dbName = name;
 }
 
+/** Every store name the app keeps (synced and device-local). */
+export const storeNames = () => [...ALL_STORES];
+
+/**
+ * Replaces the rows of the given stores in one transaction, for a restore. rows: { storeName: [row, …] }.
+ * Stores not named are left alone. The settings rows named in keepSettings stay as they are on this device
+ * (device identity, session, last backup time). Writes bypass the outbox: a restore is not a change to sync.
+ * Either every store is replaced or none is.
+ */
+export async function replaceStores(rows, { keepSettings = [] } = {}) {
+  const db = await open();
+  const kept = await Promise.all(keepSettings.map((key) => request(db.transaction('settings', 'readonly').objectStore('settings').get(key))));
+  const names = Object.keys(rows);
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(names, 'readwrite');
+    for (const name of names) {
+      const store = tx.objectStore(name);
+      store.clear();
+      const list = name === 'settings'
+        ? [...rows.settings.filter((row) => !keepSettings.includes(row.key)), ...kept.filter(Boolean)]
+        : rows[name];
+      for (const row of list) store.put(row);
+    }
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('restore aborted'));
+  });
+}
+
 /** Empties the named stores in one transaction. Used to rebuild derived data (the report rollups). */
 export async function clearStores(names) {
   const db = await open();

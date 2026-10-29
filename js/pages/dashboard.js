@@ -84,11 +84,16 @@ function hero(d) {
 }
 
 function backupNudge(d) {
-  if (d.backup.lastBackupAt) return '';
+  const last = d.backup.lastBackupAt;
+  const reminder = Number(d.backup.reminderDays) || 0;
+  const days = last ? Math.floor((Date.now() - new Date(last).getTime()) / 86400000) : null;
+  // Shown when there has never been a backup, or when the weekly (or chosen) reminder is due.
+  if (last && !(reminder > 0 && days >= reminder)) return '';
+  const text = last ? i18n.t('backup.overdue', { days }) : i18n.t('backup.text');
   return `
     <section class="nudge" data-anim="rise" role="status">
       ${icon('backup')}
-      <div><strong>${esc(i18n.t('backup.title'))}</strong><p class="small">${esc(i18n.t('backup.text'))}</p></div>
+      <div><strong>${esc(i18n.t('backup.title'))}</strong><p class="small">${esc(text)}</p></div>
       <a class="btn btn-soft btn-sm" href="#/backup">${esc(i18n.t('backup.button'))}</a>
     </section>`;
 }

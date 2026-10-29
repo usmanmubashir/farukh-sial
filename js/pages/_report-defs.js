@@ -6,6 +6,7 @@
 import * as db from '../core/db.js';
 import { t } from '../core/i18n.js';
 import { listWithStock } from '../services/products.js';
+import { getSettings } from '../services/settings.js';
 import { listCustomers, listSuppliers, partySummaries } from '../services/parties.js';
 import { accountKind, ledgerByAccount, listAccounts, listVouchers } from '../services/ledger.js';
 import { listReturns } from '../services/returns.js';
@@ -25,6 +26,7 @@ import {
   readDailySales,
   readLastSold,
   readSales,
+  readVelocity,
   stockByProduct,
 } from '../services/reports.js';
 import { ledgerGroup } from '../services/rollups.js';
@@ -126,8 +128,8 @@ export const REPORTS = {
       { key: 'suggested', label: 'rpt.col.suggested', type: 'int', sum: true },
     ],
     async load() {
-      const products = await listWithStock({ includeInactive: false });
-      const rows = lowStockRows(products).map((r) => ({ ...r, statusText: t(`rpt.status.${r.status}`) }));
+      const [products, velocity, settings] = await Promise.all([listWithStock({ includeInactive: false }), readVelocity(), getSettings()]);
+      const rows = lowStockRows(products, { velocity, orderDays: settings.orderDays }).map((r) => ({ ...r, statusText: t(`rpt.status.${r.status}`) }));
       return { rows, text: ['name', 'statusText'] };
     },
   },

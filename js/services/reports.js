@@ -118,7 +118,18 @@ export function expiryRows(batches, { from = '', to = OPEN_END, today = todayISO
 }
 
 /** Products at or below their reorder level, out of stock first. Suggests the packs to order. */
-export function lowStockRows(products) {
+/**
+ * Packs to order for one product: enough to last orderDays at the sales rate of the last 30 days
+ * (unitsLast30 / 30 a day), and at least the reorder quantity. Never less than one pack.
+ */
+export function suggestedPacks({ product, packs, unitsLast30 = 0, orderDays = 30 }) {
+  const fallback = product.reorderQty || product.reorderLevel;
+  const forDays = Math.ceil(((unitsLast30 / 30) * orderDays) / product.unitsPerPack) - packs;
+  return Math.max(1, fallback, forDays);
+}
+
+/** Products at or below their reorder level. velocity: Map productId → units sold in the last 30 days. */
+export function lowStockRows(products, { velocity = new Map(), orderDays = 30 } = {}) {
   return products
     .filter((p) => p.active !== false && p.reorderLevel > 0 && p.trackStock !== false && p.units < p.reorderLevel * p.unitsPerPack)
     .map((p) => {
@@ -129,7 +140,7 @@ export function lowStockRows(products) {
         status: p.units <= 0 ? 'out' : 'low',
         packs,
         reorderLevel: p.reorderLevel,
-        suggested: Math.max(1, (p.reorderQty || p.reorderLevel) - packs),
+        suggested: suggestedPacks({ product: p, packs, unitsLast30: velocity.get(p.id) ?? 0, orderDays }),
       };
     })
     .sort((a, b) => (a.status === b.status ? a.name.localeCompare(b.name) : a.status === 'out' ? -1 : 1));
@@ -268,6 +279,15 @@ export async function readSales({ from = '', to = OPEN_END } = {}) {
 }
 
 /** Stock by batch, the same rows the stock page uses. */
+/** Units sold per product in the 30 days up to today, from the daily product rollup. */
+export async function readVelocity(today = todayISO()) {
+  const velocity = new Map();
+  for (const row of await readDailyProducts({ from: addDays(today, -29), to: today })) {
+    velocity.set(row.productId, (velocity.get(row.productId) ?? 0) + row.units);
+  }
+  return velocity;
+}
+
 export async function readBatches(today = todayISO()) {
   return batchRows({ withStockOnly: false, today });
 }

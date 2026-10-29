@@ -8,6 +8,7 @@ import { t } from '../core/i18n.js';
 import { formatDate, todayISO } from '../core/dates.js';
 import { ServiceError, missing, requireInt, requireOneOf, requireText } from './errors.js';
 import { lowStock } from './stock.js';
+import { readVelocity, suggestedPacks } from './reports.js';
 import { keyOf } from './products.js';
 
 export const REASONS = ['low_stock', 'not_found', 'manual'];
@@ -59,12 +60,15 @@ export function noteSearchMiss(query) {
 export async function autoAddLowStock() {
   const low = await lowStock();
   const open = await listOpen();
+  const [velocity, settings] = await Promise.all([readVelocity(), db.getSetting('business', {})]);
   let added = 0;
-  for (const { product } of low) {
-    if (open.some((row) => row.productId === product.id)) continue;
+  for (const row of low) {
+    const { product } = row;
+    if (open.some((o) => o.productId === product.id)) continue;
+    const packs = suggestedPacks({ product, packs: Math.trunc(row.units / product.unitsPerPack), unitsLast30: velocity.get(product.id) ?? 0, orderDays: settings.orderDays ?? 30 });
     await addDemand({
       productId: product.id,
-      packs: Math.max(1, product.reorderQty || product.reorderLevel),
+      packs,
       reason: 'low_stock',
     });
     added += 1;

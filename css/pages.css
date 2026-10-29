@@ -2243,3 +2243,87 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- Settings and backup ---------- */
+
+.set-root,
+.backup-root {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.set-section {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.set-section > h3 {
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+
+.set-sub {
+  margin: var(--space-3) 0 0;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--c-text-muted);
+}
+
+.set-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--touch);
+  cursor: pointer;
+}
+
+.set-form {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.set-actions {
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.set-warn {
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--c-warn-soft);
+  color: var(--c-text);
+}
+
+.set-printer-status,
+.set-app-status {
+  min-height: 1.2em;
+}
+
+.section .field input[type='number'],
+.section .field input[type='text'],
+.section .field input[type='password'],
+.section .field input[type='file'],
+.section .field select {
+  min-height: var(--touch);
+  width: 100%;
+  min-width: 0;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-md);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font: inherit;
+}
+
+.restore-result {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.backup-status p {
+  margin: 0 0 var(--space-2);
+}

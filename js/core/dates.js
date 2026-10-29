@@ -1,3 +1,4 @@
+import { localizeDigits } from './numbers.js';
 // Dates are stored as ISO strings: "YYYY-MM-DD" for business dates, full ISO timestamps for audit fields.
 // Display is DD/MM/YYYY with ASCII digits.
 
@@ -34,13 +35,13 @@ export function addDays(iso, days) {
 export function formatDate(iso) {
   if (!isValidISODate(iso)) return '—';
   const [y, m, d] = iso.split('-');
-  return `${d}/${m}/${y}`;
+  return localizeDigits(`${d}/${m}/${y}`);
 }
 
 export function formatDateTime(ms) {
   if (!Number.isFinite(ms)) return '—';
   const date = new Date(ms);
-  return `${formatDate(toISODate(date))} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return localizeDigits(`${formatDate(toISODate(date))} ${pad(date.getHours())}:${pad(date.getMinutes())}`);
 }
 
 /**

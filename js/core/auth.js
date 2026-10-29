@@ -56,13 +56,19 @@ export async function ensureDeviceId() {
 export const getDeviceId = () => db.getSetting('deviceId', '');
 export const getPharmacyName = () => db.getSetting('pharmacyName', '');
 
+/** Session length from the business settings (sessionHours), or the default. */
+export async function sessionHours() {
+  const hours = Number((await db.getSetting('business', {}))?.sessionHours);
+  return Number.isFinite(hours) && hours >= 1 ? hours : SESSION_HOURS;
+}
+
 async function startSession(username, pharmacyName) {
   const now = Date.now();
   const session = {
     token: toBase64(crypto.getRandomValues(new Uint8Array(16))),
     username,
     issuedAt: now,
-    expiresAt: now + SESSION_HOURS * 3600000,
+    expiresAt: now + (await sessionHours()) * 3600000,
   };
   await db.setSetting('session', session);
   failures.count = 0;
@@ -122,6 +128,29 @@ export async function login(username, password) {
   }
 
   await startSession(owner.username, await getPharmacyName());
+}
+
+/**
+ * Changes the owner's password. The current password must be given. The new one needs the minimum length
+ * and a matching confirmation. A new salt is made every time.
+ */
+export async function changePassword({ current, password, confirm }) {
+  const owner = await db.get('users', 'owner');
+  if (!owner) throw new AuthError('notSetup');
+  const attempt = await derive(String(current ?? ''), fromBase64(owner.salt), owner.iterations);
+  if (!sameBytes(attempt, fromBase64(owner.hash))) throw new AuthError('wrongCurrentPassword');
+  if (String(password ?? '').length < MIN_PASSWORD) throw new AuthError('passwordShort', { min: MIN_PASSWORD });
+  if (password !== confirm) throw new AuthError('passwordMismatch');
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const hash = await derive(password, salt, PBKDF2_ITERATIONS);
+  await db.transaction(async (ctx) => {
+    ctx.put('users', { ...owner, salt: toBase64(salt), hash: toBase64(hash), iterations: PBKDF2_ITERATIONS });
+  });
+}
+
+/** The owner's username (lower case), for the account screen. */
+export async function ownerUsername() {
+  return (await db.get('users', 'owner'))?.username ?? '';
 }
 
 export async function logout() {

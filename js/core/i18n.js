@@ -9,12 +9,14 @@ import urDocs from '../i18n/docs-ur.js';
 import enParties from '../i18n/parties-en.js';
 import urParties from '../i18n/parties-ur.js';
 import enReports from '../i18n/reports-en.js';
+import enSettings from '../i18n/settings-en.js';
 import urReports from '../i18n/reports-ur.js';
+import urSettings from '../i18n/settings-ur.js';
 import * as store from './store.js';
 
 // Screen strings override the base dictionaries with the same key.
-const en = { ...enBase, ...enScreens, ...enDocs, ...enParties, ...enReports };
-const ur = { ...urBase, ...urScreens, ...urDocs, ...urParties, ...urReports };
+const en = { ...enBase, ...enScreens, ...enDocs, ...enParties, ...enReports, ...enSettings };
+const ur = { ...urBase, ...urScreens, ...urDocs, ...urParties, ...urReports, ...urSettings };
 const DICTIONARIES = { en, ur };
 const RTL_LANGS = ['ur', 'ar', 'fa'];
 const STORAGE_KEY = 'shifa.lang';

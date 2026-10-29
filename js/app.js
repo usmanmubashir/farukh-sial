@@ -10,6 +10,8 @@ import * as sync from './core/sync.js';
 import * as ui from './core/ui.js';
 import * as anim from './core/anim.js';
 import { seedDefaultAccounts } from './services/ledger.js';
+import { getSettings } from './services/settings.js';
+import { setDigitStyle } from './core/numbers.js';
 
 const page = (name) => () => import(`./pages/${name}.js`);
 
@@ -263,6 +265,7 @@ function openCommandPalette() {
 }
 
 function bindShell() {
+  store.subscribe('digits', () => router.refresh());
   store.subscribe('lang', () => {
     renderNav();
     renderAvatar();
@@ -339,6 +342,7 @@ async function boot() {
   await auth.ensureDeviceId();
   await seedDefaultAccounts();
   await auth.restoreSession();
+  setDigitStyle((await getSettings()).numberDigits);
 
   router.beforeEach(accessGuard);
   bindShell();

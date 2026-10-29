@@ -22,6 +22,7 @@ export async function getDashboard({ today = todayISO() } = {}) {
   ]);
 
   const live = sales.filter((s) => s.status !== 'void');
+  const lastBackupAt = await db.getSetting('lastBackupAt', null); // kept on this device, not in the business settings
   const todays = live.filter((s) => s.date === today);
   const sum = (rows, key) => rows.reduce((total, row) => total + (row[key] ?? 0), 0);
 
@@ -78,7 +79,7 @@ export async function getDashboard({ today = todayISO() } = {}) {
       cashIn,
       cashOut,
     },
-    backup: { lastBackupAt: settings.lastBackupAt ?? null },
+    backup: { lastBackupAt, reminderDays: settings.backupReminderDays ?? 7 },
     attention: {
       expired: expired.length,
       expiring30: expiringSoon.length,

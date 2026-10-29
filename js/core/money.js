@@ -3,6 +3,7 @@
 //  - Rounding is half away from zero, applied only at the point of calculation.
 //  - Formatting happens only at display time, through format().
 import { t } from './i18n.js';
+import { localizeDigits } from './numbers.js';
 
 const PAISA_PER_RUPEE = 100;
 
@@ -85,5 +86,5 @@ export function format(paisa, { symbol = true, decimals = 2 } = {}) {
   if (decimals !== 0) text += `.${String(fraction).padStart(2, '0')}`;
 
   const sign = value < 0 ? '−' : '';
-  return symbol ? `${sign}${t('currency.symbol')} ${text}` : `${sign}${text}`;
+  return localizeDigits(symbol ? `${sign}${t('currency.symbol')} ${text}` : `${sign}${text}`);
 }

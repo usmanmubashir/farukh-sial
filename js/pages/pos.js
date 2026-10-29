@@ -86,7 +86,12 @@ function discountAmount() {
   return Math.min(sub, paisa(state.discount));
 }
 
-const taxAmount = () => paisa(state.tax);
+// A typed tax wins. Otherwise, when sales tax is on in settings, the rate applies to the amount after discount.
+const taxAmount = () => {
+  if (String(state.tax ?? '').trim() !== '') return paisa(state.tax);
+  if (settings.taxEnabled) return percentOf(subtotal() - discountAmount(), Number(settings.taxRate) || 0);
+  return 0;
+};
 const totalAmount = () => subtotal() - discountAmount() + taxAmount();
 const rupees = (value) => format(value, { symbol: false });
 const money = (value) => `<span class="money" data-count="${value}" data-format="money-plain">${esc(rupees(value))}</span>`;
@@ -457,6 +462,14 @@ function openPay() {
 async function showSuccess(sale) {
   const model = await buildReceipt(sale.id);
   state.lastSale = model;
+  // Auto-print: send the receipt to the chosen printer as soon as the sale completes.
+  if (settings.printAutoPrint) {
+    if (settings.printMethod === 'bluetooth') {
+      if (printerConnected()) printToBluetooth(model, { copies: settings.printCopies }).catch((err) => console.error('[pos] auto print failed', err));
+    } else {
+      printInBrowser(model, { copies: settings.printCopies });
+    }
+  }
   const btBtn = bluetoothSupported()
     ? `<button type="button" class="btn btn-soft" data-bt>${esc(t(printerConnected() ? 'success.printBluetooth' : 'success.connectPrinter'))}</button>`
     : '';
@@ -473,11 +486,11 @@ async function showSuccess(sale) {
       </div>
     </div>`);
   const dialog = showDialog({ title: t('success.title'), body: $body, actions: [] });
-  $body.find('[data-print]').on('click', () => printInBrowser(model));
+  $body.find('[data-print]').on('click', () => printInBrowser(model, { copies: settings.printCopies }));
   $body.find('[data-bt]').on('click', async () => {
     try {
       if (!printerConnected()) await connectBluetoothPrinter();
-      await printToBluetooth(model);
+      await printToBluetooth(model, { copies: settings.printCopies });
       ui.toast(t('success.printBluetooth'), { type: 'success' });
     } catch (err) {
       console.error('[pos] bluetooth print failed', err);
