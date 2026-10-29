@@ -248,7 +248,11 @@ function appearanceSection() {
   return section(
     'set-appearance',
     t('settings.appearance'),
-    selectField('set-theme', t('settings.theme'), THEMES.map((o) => [o.value, t(o.key)]), theme, { help: t('settings.themeHelp') }),
+    selectField('set-theme', t('settings.theme'), THEMES.map((o) => [o.value, t(o.key)]), theme, { help: t('settings.themeHelp') }) +
+      `<div class="field">
+        <label class="check-row"><input id="set-reduce-motion" type="checkbox"${ui.getReduceMotion() ? ' checked' : ''}> <span>${esc(t('settings.reduceMotion'))}</span></label>
+        <span class="hint">${esc(t('settings.reduceMotionHelp'))}</span>
+      </div>`,
   );
 }
 
@@ -429,6 +433,7 @@ function bind() {
   $host.on('change', '#set-lang', (event) => i18n.setLang(event.currentTarget.value));
   $host.on('change', '#set-digits', (event) => saveDigits(event.currentTarget.value));
   $host.on('change', '#set-theme', (event) => ui.setTheme(event.currentTarget.value));
+  $host.on('change', '#set-reduce-motion', (event) => ui.setReduceMotion(event.currentTarget.checked));
   $host.on('submit', '[data-form="profile"]', (event) => {
     event.preventDefault();
     saveProfileForm(event.currentTarget);

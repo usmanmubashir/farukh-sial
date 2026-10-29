@@ -218,7 +218,8 @@ function bind() {
   });
   $host.on('click', '[data-remove]', async (event) => {
     const id = event.currentTarget.closest('tr').getAttribute('data-id');
-    await demand.removeDemand(id);
+    const row = await demand.removeDemand(id);
+    ui.toast(t('undo.removed', { name: row.name }), { action: { label: t('btn.undo'), run: () => demand.restoreDemand(row) } });
   });
   $host.on('click', '[data-receive]', (event) => navigate(event.currentTarget.getAttribute('data-receive')));
 }

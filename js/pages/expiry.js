@@ -1,6 +1,7 @@
 // Expiry: batches grouped by how long they have left, a searchable list, and a return list that sends
 // expired batches back to their suppliers.
 import * as anim from '../core/anim.js';
+import { debounce } from '../core/resilience.js';
 import * as i18n from '../core/i18n.js';
 import * as ui from '../core/ui.js';
 import { esc, money } from '../core/ui.js';
@@ -149,9 +150,10 @@ function bind() {
     event.currentTarget.setAttribute('aria-pressed', 'true');
     anim.flip($host.find('.exp-list')[0], paintList);
   });
+  const searchPaintList = debounce(() => paintList(), 150);
   $host.on('input', '.exp-search', (event) => {
     query = event.currentTarget.value;
-    paintList();
+    searchPaintList();
   });
   $host.on('change', '[data-select]', (event) => {
     const id = event.currentTarget.getAttribute('data-select');

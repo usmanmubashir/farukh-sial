@@ -2,6 +2,7 @@
 // Pages export { route, title, render($root, params, query), destroy() }.
 // Guards (beforeEach) may return false (stay put) or a path to redirect to.
 import { emit } from './events.js';
+import { skeleton } from './ui.js';
 import { t } from './i18n.js';
 import * as anim from './anim.js';
 
@@ -120,13 +121,16 @@ export function createRouter({ routes, notFound, view }) {
       }
     }
     current = null;
-    view.empty();
+    // While the page renders (including its data reads), its region shows a skeleton and is marked busy.
+    view.attr('aria-busy', 'true').html(skeleton(4));
 
     try {
       await module.render(view, to.params, to.query);
     } catch (err) {
       console.error(`[router] render failed for ${path}`, err);
       failedPage.render(view);
+    } finally {
+      view.removeAttr('aria-busy');
     }
     if (mine !== token) {
       module.destroy?.();

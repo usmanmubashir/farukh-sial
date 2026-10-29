@@ -1,5 +1,6 @@
 // Medicines: searchable list with filter chips, groups, barcode entry, the new/edit form and the popular seed.
 import * as anim from '../core/anim.js';
+import { debounce } from '../core/resilience.js';
 import * as i18n from '../core/i18n.js';
 import * as ui from '../core/ui.js';
 import { esc, icon, money } from '../core/ui.js';
@@ -98,9 +99,10 @@ async function load() {
 }
 
 function bind() {
+  const searchPaintList = debounce(() => paintList(), 150);
   $host.on('input', '.med-search', (event) => {
     query = event.currentTarget.value;
-    paintList();
+    searchPaintList();
   });
   $host.on('click', '[data-filter]', (event) => {
     filter = event.currentTarget.getAttribute('data-filter');

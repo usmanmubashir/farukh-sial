@@ -1,6 +1,7 @@
 // Purchases: stock-in documents by period, with search (number or supplier), a status filter, summary tiles
 // and a detail sheet. "New purchase" opens the purchase screen. A purchase can be returned from its sheet.
 import * as events from '../core/events.js';
+import { debounce } from '../core/resilience.js';
 import { navigate } from '../core/router.js';
 import { esc, money } from '../core/ui.js';
 import { t } from '../core/i18n.js';
@@ -169,9 +170,10 @@ function bind() {
     Object.assign(state, shared.readPeriod($host), { period: 'custom' });
     load();
   });
+  const searchPaint = debounce(() => paint(), 150);
   $host.on('input', '.doc-search', (event) => {
     state.query = event.currentTarget.value;
-    paint();
+    searchPaint();
   });
   $host.on('click', '[data-status]', (event) => {
     state.status = event.currentTarget.getAttribute('data-status');

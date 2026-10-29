@@ -1,6 +1,7 @@
 // Returns: every sale return and purchase return by date and type. A return always starts from its original
 // document, so the banner points there, and the list can open each return's detail sheet.
 import * as events from '../core/events.js';
+import { debounce } from '../core/resilience.js';
 import { navigate } from '../core/router.js';
 import { esc, money } from '../core/ui.js';
 import { t } from '../core/i18n.js';
@@ -174,9 +175,10 @@ function bind() {
     Object.assign(state, shared.readPeriod($host), { period: 'custom' });
     load();
   });
+  const searchPaint = debounce(() => paint(), 150);
   $host.on('input', '.doc-search', (event) => {
     state.query = event.currentTarget.value;
-    paint();
+    searchPaint();
   });
   $host.on('click', '[data-type]', (event) => {
     state.type = event.currentTarget.getAttribute('data-type');

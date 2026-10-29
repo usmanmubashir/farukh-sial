@@ -30,6 +30,8 @@
     --c-surface-muted: #1a2b30;
     --c-border: #22353a;
     --c-border-strong: #2e464c;
+  --c-control-border: #5b7478;
+    --c-control-border: #5b7478;
     --c-text: #eef5f6;
     --c-text-muted: #9bb2b6;
     --c-scrim: rgb(0 0 0 / 0.62);
@@ -87,6 +89,7 @@
   --c-surface-muted: #1a2b30;
   --c-border: #22353a;
   --c-border-strong: #2e464c;
+  --c-control-border: #5b7478;
   --c-text: #eef5f6;
   --c-text-muted: #9bb2b6;
   --c-scrim: rgb(0 0 0 / 0.62);

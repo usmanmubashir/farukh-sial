@@ -52,15 +52,29 @@ export function icon(name) {
 }
 
 /** Shows a message for a few seconds. Returns a function that dismisses it early. */
-export function toast(message, { type = 'info', timeout = 3500 } = {}) {
+/**
+ * A short message. Errors are announced as alerts, other messages politely. `action` adds one button, such as Undo:
+ * { label, run } runs once and dismisses the toast.
+ */
+export function toast(message, { type = 'info', timeout = 3500, action = null } = {}) {
+  const role = type === 'error' ? 'alert' : 'status';
   const $item = $(
-    `<div class="toast toast-${type}" role="status"><span class="toast-msg"></span><button type="button" class="toast-close">×</button></div>`,
+    `<div class="toast toast-${type}" role="${role}"><span class="toast-msg"></span><button type="button" class="toast-close">×</button></div>`,
   );
   $item.find('.toast-msg').text(message);
   $item
     .find('.toast-close')
     .attr('aria-label', t('a11y.toastClose'))
     .on('click', remove);
+  if (action) {
+    $('<button type="button" class="btn btn-soft btn-sm toast-action"></button>')
+      .text(action.label)
+      .on('click', () => {
+        remove();
+        action.run();
+      })
+      .insertBefore($item.find('.toast-close'));
+  }
   $('#toast-root').append($item);
 
   let timer = timeout > 0 ? setTimeout(remove, timeout) : null;
@@ -372,4 +386,30 @@ export function openPalette({ source, placeholder = '' } = {}) {
   $input[0].focus();
   render();
   return { close };
+}
+
+/* ---------- Reduce motion (per device; a UI preference, so it lives in localStorage) ---------- */
+
+const MOTION_KEY = 'shifa.reduceMotion';
+
+/** The app's own switch. Works on top of the device's "reduce motion" setting. */
+export function getReduceMotion() {
+  try {
+    return localStorage.getItem(MOTION_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function setReduceMotion(on) {
+  try {
+    localStorage.setItem(MOTION_KEY, on ? '1' : '0');
+  } catch {
+    /* storage blocked: the choice lasts for this visit only */
+  }
+  document.documentElement.classList.toggle('reduce-motion', Boolean(on));
+}
+
+export function initReduceMotion() {
+  document.documentElement.classList.toggle('reduce-motion', getReduceMotion());
 }

@@ -13,8 +13,8 @@ import { APP_VERSION } from '../core/version.js';
 import { ServiceError } from './errors.js';
 
 export const BACKUP_FORMAT = 'shifa-pos-backup';
-/** Never in a backup: passwords (users), the pending sends (outbox) and this device's sync cursor (syncState). */
-const EXCLUDED_STORES = ['users', 'outbox', 'syncState'];
+/** Never in a backup: passwords (users), pending sends (outbox), this device's sync cursor (syncState) and its error log. */
+const EXCLUDED_STORES = ['users', 'outbox', 'syncState', 'errorLog'];
 /** Device-only settings: this device's identity, sign-in, backup time and sync connection. */
 const LOCAL_SETTINGS = ['deviceId', 'session', 'lastBackupAt', 'syncConfig', 'syncSession'];
 /** Backups from schema 3 (before sync) still restore. They simply carry no tombstones or stamps. */

@@ -1,6 +1,7 @@
 // Stock: four totals, search and filters, and one expandable row per medicine. The row shows its batches,
 // an "Add / adjust" dialog (add a batch, or change a batch's quantity with a reason) and the adjustment history.
 import * as anim from '../core/anim.js';
+import { debounce } from '../core/resilience.js';
 import * as i18n from '../core/i18n.js';
 import * as ui from '../core/ui.js';
 import { esc, money } from '../core/ui.js';
@@ -210,9 +211,10 @@ function openStockDialog(product, onDone) {
 }
 
 function bind() {
+  const searchPaintList = debounce(() => paintList(), 150);
   $host.on('input', '.stock-search', (event) => {
     query = event.currentTarget.value;
-    paintList();
+    searchPaintList();
   });
   $host.on('click', '[data-filter]', (event) => {
     filter = event.currentTarget.getAttribute('data-filter');

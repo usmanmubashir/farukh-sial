@@ -19,7 +19,7 @@ export const SYNCED_STORES = [
  * tombstones is sync state: one row per deleted synced row, so an older copy arriving later cannot bring it back.
  * It is included in backups and snapshots.
  */
-export const LOCAL_STORES = ['settings', 'counters', 'outbox', 'syncState', 'users', 'dailySales', 'dailyProducts', 'dailyLedger', 'tombstones'];
+export const LOCAL_STORES = ['settings', 'counters', 'outbox', 'syncState', 'users', 'dailySales', 'dailyProducts', 'dailyLedger', 'tombstones', 'errorLog'];
 
 const ALL_STORES = [...SYNCED_STORES, ...LOCAL_STORES];
 
@@ -138,7 +138,24 @@ const migrations = [
     }
     stampExisting(tx.objectStore('outbox'), (row) => ({ opId: legacyStamp(row.createdAt, row.seq), stamp: legacyStamp(row.createdAt, row.seq) }));
   },
+  // v5: local error log (written by the error boundary, never synced, never in backups).
+  (db) => {
+    const log = db.createObjectStore('errorLog', { keyPath: 'id' });
+    log.createIndex('at', 'at');
+  },
 ];
+
+/** The migration list, exported so the upgrade path can be tested from v1 (tests/migration.html). */
+export const MIGRATIONS = migrations;
+
+/** Thrown when the browser refuses a write because the device is out of storage. */
+export class StorageFullError extends Error {
+  constructor() {
+    super('Storage is full');
+    this.name = 'StorageFullError';
+    this.code = 'storageFull';
+  }
+}
 
 /** Stamp for a change made before stamps existed: its own time, then its position, device 'legacy'. */
 function legacyStamp(iso, position) {
@@ -432,7 +449,10 @@ function run(work, { replicating }) {
 
         const committed = new Promise((done, fail) => {
           tx.oncomplete = () => done();
-          tx.onabort = () => fail(ctx.error ?? tx.error ?? new Error('IndexedDB transaction aborted'));
+          tx.onabort = () => {
+            const cause = ctx.error ?? tx.error;
+            fail(cause?.name === 'QuotaExceededError' ? new StorageFullError() : cause ?? new Error('IndexedDB transaction aborted'));
+          };
         });
 
         const finished = Promise.resolve().then(() => work(ctx));

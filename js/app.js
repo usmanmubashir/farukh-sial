@@ -13,6 +13,7 @@ import { seedDefaultAccounts } from './services/ledger.js';
 import { getSettings } from './services/settings.js';
 import { setDigitStyle } from './core/numbers.js';
 import { openSyncSheet } from './pages/_sync-sheet.js';
+import { installErrorBoundary, guardDoubleSubmit } from './core/resilience.js';
 
 const page = (name) => () => import(`./pages/${name}.js`);
 
@@ -406,6 +407,9 @@ function bindShell() {
 }
 
 async function boot() {
+  installErrorBoundary();
+  guardDoubleSubmit();
+  ui.initReduceMotion();
   i18n.init();
   ui.initTheme();
   anim.install();
@@ -418,8 +422,8 @@ async function boot() {
 
   await db.open();
   await auth.ensureDeviceId();
-  await seedDefaultAccounts();
-  await auth.restoreSession();
+  // Independent reads: run together so the first screen waits for one round trip, not two.
+  await Promise.all([seedDefaultAccounts(), auth.restoreSession()]);
   setDigitStyle((await getSettings()).numberDigits);
   // Ask once for durable storage, so the browser does not clear the records when space runs short.
   navigator.storage?.persist?.().catch(() => {});
@@ -427,7 +431,8 @@ async function boot() {
   router.beforeEach(accessGuard);
   bindShell();
   renderAvatar();
-  await sync.init();
+  // Sync starts in the background. The first screen does not wait for it.
+  sync.init();
   router.start();
   $('#app').removeClass('is-booting');
 }

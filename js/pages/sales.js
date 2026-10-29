@@ -1,6 +1,7 @@
 // Sales: every invoice by period, with search (invoice number, customer or patient), a status filter, summary tiles
 // and a detail sheet with items, payments, profit, reprint, WhatsApp share and "Return items".
 import * as events from '../core/events.js';
+import { debounce } from '../core/resilience.js';
 import { navigate } from '../core/router.js';
 import { esc, money } from '../core/ui.js';
 import { t } from '../core/i18n.js';
@@ -214,9 +215,10 @@ function bind() {
     Object.assign(state, shared.readPeriod($host), { period: 'custom' });
     load();
   });
+  const searchPaint = debounce(() => paint(), 150);
   $host.on('input', '.doc-search', (event) => {
     state.query = event.currentTarget.value;
-    paint();
+    searchPaint();
   });
   $host.on('click', '[data-status]', (event) => {
     state.status = event.currentTarget.getAttribute('data-status');

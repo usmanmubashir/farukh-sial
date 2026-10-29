@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Schema migration test</title>
+    <style>
+      body { font: 15px/1.5 system-ui, sans-serif; margin: 24px; color: #1f2937; background: #fff; }
+      .ok { color: #047857; font-weight: 600; }
+      .bad { color: #b91c1c; font-weight: 600; }
+      td, th { padding: 6px 10px; border-bottom: 1px solid #e5e7eb; text-align: start; }
+      table { border-collapse: collapse; margin-top: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>Schema migration: version 1 to the current version</h1>
+    <p>Builds a database exactly as version 1 shipped it (using the shipped migration), puts real rows in it, then opens it through the
+      app's database layer. Every later migration runs. The rows must survive, the new stores must exist, and old rows must get sync stamps.</p>
+    <p id="summary">Running…</p>
+    <table><thead><tr><th>Check</th><th>Result</th><th>Detail</th></tr></thead><tbody id="rows"></tbody></table>
+
+    <script type="module">
+      import * as db from '../js/core/db.js';
+      import { ensureRollups } from '../js/services/rollups.js';
+
+      const NAME = 'shifa-migration-test';
+      db.useDatabase(NAME);
+      const results = [];
+      const check = (label, ok, detail = '') => results.push({ label, ok: Boolean(ok), detail: String(detail) });
+      const put = (tx, store, row) => new Promise((resolve, reject) => {
+        const req = tx.objectStore(store).put(row);
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+
+      async function run() {
+        await db.destroyDatabase();
+
+        // 1. A version 1 database, built with the migration that shipped in version 1.
+        await new Promise((resolve, reject) => {
+          const req = indexedDB.open(NAME, 1);
+          req.onupgradeneeded = () => db.MIGRATIONS[0](req.result, req.transaction);
+          req.onsuccess = () => {
+            req.result.close();
+            resolve();
+          };
+          req.onerror = () => reject(req.error);
+        });
+
+        // 2. Real rows in the version 1 shape: a medicine, a batch, a sale with its line and a stock movement, an account, an outbox entry.
+        const iso = '2026-10-01T09:00:00.000Z';
+        await new Promise((resolve, reject) => {
+          const req = indexedDB.open(NAME, 1);
+          req.onsuccess = () => {
+            const database = req.result;
+            const tx = database.transaction(['products', 'batches', 'sales', 'saleItems', 'stockMovements', 'accounts', 'outbox', 'settings'], 'readwrite');
+            Promise.all([
+              put(tx, 'products', { id: 'p1', name: 'Panadol', nameKey: 'panadol', unitsPerPack: 10, salePricePerPack: 3000, costPerPack: 2000, updatedAt: iso }),
+              put(tx, 'batches', { id: 'b1', productId: 'p1', batchNo: 'PN-1', expiry: '2028-12-31', onHand: 90, costPerPack: 2000, mrp: 3300, updatedAt: iso }),
+              put(tx, 'sales', { id: 's1', number: 'SALE-0001', date: '2026-10-01', status: 'final', subtotal: 3000, discount: 0, tax: 0, total: 3000, paid: 3000, balance: 0, updatedAt: iso }),
+              put(tx, 'saleItems', { id: 'si1', saleId: 's1', productId: 'p1', batchId: 'b1', units: 10, lineTotal: 3000, cost: 2000, updatedAt: iso }),
+              put(tx, 'stockMovements', { id: 'm1', productId: 'p1', batchId: 'b1', units: -10, type: 'sale', docType: 'sale', docId: 's1', date: '2026-10-01', updatedAt: iso }),
+              put(tx, 'accounts', { id: 'acc-1000', code: '1000', key: 'account.cashInHand', type: 'asset', normal: 'debit', kind: 'cash', system: true, updatedAt: iso }),
+              put(tx, 'settings', { key: 'business', value: { taxEnabled: false, devicePrefix: '' } }),
+              new Promise((ok, fail) => {
+                const add = tx.objectStore('outbox').add({ store: 'products', op: 'put', key: 'p1', record: { id: 'p1', name: 'Panadol' }, status: 'pending', createdAt: iso, attempts: 0 });
+                add.onsuccess = () => ok();
+                add.onerror = () => fail(add.error);
+              }),
+            ]).catch(reject);
+            tx.oncomplete = () => {
+              database.close();
+              resolve();
+            };
+            tx.onerror = () => reject(tx.error);
+          };
+          req.onerror = () => reject(req.error);
+        });
+
+        // 3. Open through the app's layer. This runs migrations 2, 3, 4 and onward.
+        const product = await db.get('products', 'p1');
+        const batch = await db.get('batches', 'b1');
+        const sale = await db.get('sales', 's1');
+        const line = await db.getAll('saleItems', { index: 'saleId', query: 's1' });
+        const movements = await db.getAll('stockMovements', { index: 'batchId', query: 'b1' });
+        const outbox = await db.getAll('outbox');
+
+        check('the database opens at the current version', db.DB_VERSION >= 4, `version ${db.DB_VERSION}`);
+        check('medicine survives the upgrade', product?.name === 'Panadol' && product.salePricePerPack === 3000);
+        check('batch survives with its stock cache', batch?.onHand === 90 && batch.batchNo === 'PN-1');
+        check('sale, its line and its movement survive', sale?.number === 'SALE-0001' && line.length === 1 && movements.length === 1);
+        check('version 2 store exists (rxRegister)', (await db.count('rxRegister')) === 0);
+        check('version 3 stores exist (rollups)', (await db.count('dailySales')) >= 0 && (await db.count('dailyLedger')) >= 0);
+        check('version 4 store exists (tombstones)', (await db.count('tombstones')) === 0);
+        check('version 5 store exists (errorLog)', (await db.count('errorLog')) >= 0);
+        check('rows written before sync get a legacy stamp', typeof product?.stamp === 'string' && product.stamp.endsWith('.legacy'), product?.stamp);
+        check('outbox entries from before sync get an opId', outbox.length === 1 && typeof outbox[0].opId === 'string' && outbox[0].opId.endsWith('.legacy'));
+        check('new writes after the upgrade are stamped with this device', await (async () => {
+          await db.transaction((ctx) => ctx.put('products', { id: 'p2', name: 'Augmentin', nameKey: 'augmentin', unitsPerPack: 10 }));
+          const fresh = await db.get('products', 'p2');
+          return typeof fresh.stamp === 'string' && !fresh.stamp.endsWith('.legacy');
+        })());
+        let rebuilt = false;
+        try {
+          rebuilt = await ensureRollups();
+        } catch (err) {
+          check('rollups can be rebuilt from the upgraded data', false, err?.message);
+        }
+        check('rollups rebuild from version 1 sales', rebuilt === true && (await db.count('dailySales')) >= 1);
+
+        // 4. Clean up so the next run starts from nothing.
+        await db.destroyDatabase();
+
+        const failed = results.filter((r) => !r.ok).length;
+        document.getElementById('summary').innerHTML = `${failed ? `<span class="bad">${failed} check(s) failed.</span>` : '<span class="ok">All checks passed.</span>'} ${results.length} checks.`;
+        const body = document.getElementById('rows');
+        for (const r of results) {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td></td><td class="${r.ok ? 'ok' : 'bad'}">${r.ok ? 'PASS' : 'FAIL'}</td><td></td>`;
+          tr.children[0].textContent = r.label;
+          tr.children[2].textContent = r.detail;
+          body.append(tr);
+        }
+        window.migrationResult = { failed, results };
+        document.title = failed ? `Migration: ${failed} FAIL` : 'Migration: PASS';
+      }
+
+      run().catch((err) => {
+        console.error(err);
+        document.getElementById('summary').textContent = `The migration test stopped: ${err?.message ?? err}`;
+        window.migrationResult = { error: String(err?.stack ?? err) };
+      });
+    </script>
+  </body>
+</html>

@@ -318,8 +318,17 @@ export function resumeCart(id) {
   return takeHeldCart(id);
 }
 
+/** Discards a held cart and returns it, so the screen can offer to put it back (restoreHeldCart). */
 export function discardHeldCart(id) {
-  return takeHeldCart(id).then(() => undefined);
+  return takeHeldCart(id);
+}
+
+/** Puts a discarded held cart back at the end of the list. */
+export function restoreHeldCart(entry) {
+  return db.transaction(async (ctx) => {
+    const row = await ctx.get('settings', 'heldCarts');
+    ctx.put('settings', { key: 'heldCarts', value: [...(row?.value ?? []), entry] });
+  });
 }
 
 function takeHeldCart(id) {

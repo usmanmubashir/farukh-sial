@@ -1,6 +1,7 @@
 // Rx register. One line for every Rx or controlled medicine sold: date, invoice, patient, doctor, medicine,
 // batch and quantity. Filter by period, class and text. Print it on A4 for the inspector, or export as CSV.
 import * as events from '../core/events.js';
+import { debounce } from '../core/resilience.js';
 import { esc } from '../core/ui.js';
 import { t } from '../core/i18n.js';
 import { formatDate } from '../core/dates.js';
@@ -171,9 +172,10 @@ function bind() {
     Object.assign(state, shared.readPeriod($host), { period: 'custom' });
     load();
   });
+  const searchPaint = debounce(() => paint(), 150);
   $host.on('input', '.doc-search', (event) => {
     state.query = event.currentTarget.value;
-    paint();
+    searchPaint();
   });
   $host.on('click', '[data-cls]', (event) => {
     state.cls = event.currentTarget.getAttribute('data-cls');

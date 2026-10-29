@@ -185,7 +185,7 @@ textarea {
   min-height: var(--touch);
   padding: var(--space-2) var(--space-3);
   background: var(--c-surface);
-  border: 1px solid var(--c-border-strong);
+  border: 1px solid var(--c-control-border);
   border-radius: var(--radius);
   transition: border-color var(--d-2), box-shadow var(--d-3), background var(--d-2);
 }
@@ -337,7 +337,7 @@ select {
   border-radius: var(--radius-pill);
   background: #ffffff;
   box-shadow: var(--shadow-2);
-  transition: transform var(--d-3) var(--ease-spring), width var(--d-2) var(--ease-out-expo);
+  transition: transform var(--d-3) var(--ease-spring);
 }
 
 .switch:active .switch-thumb {
@@ -431,7 +431,7 @@ select {
   min-height: 36px;
   padding: 0 var(--space-4);
   border-radius: var(--radius-pill);
-  border: 1px solid var(--c-border-strong);
+  border: 1px solid var(--c-control-border);
   background: var(--c-surface);
   color: var(--c-text);
   font-size: var(--fs-sm);
@@ -473,7 +473,7 @@ select {
   background: var(--c-surface);
   box-shadow: var(--shadow-2);
   transform: translateX(var(--ind-x));
-  transition: transform var(--d-3) var(--ease-spring), width var(--d-3) var(--ease-out-expo);
+  transition: transform var(--d-3) var(--ease-spring);
 }
 
 .seg-option {
@@ -747,7 +747,7 @@ select {
   border-radius: 3px;
   background: var(--grad-brand);
   transform: translateX(var(--ind-x));
-  transition: transform var(--d-4) var(--ease-spring), width var(--d-3) var(--ease-out-expo);
+  transition: transform var(--d-4) var(--ease-spring);
 }
 
 /* ---------- Badges, pills, banners ---------- */

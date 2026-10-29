@@ -76,6 +76,8 @@
   --c-surface-muted: var(--n-100);
   --c-border: var(--n-200);
   --c-border-strong: var(--n-300);
+  /* Field and control outlines: 3:1 against the surface (WCAG 1.4.11). */
+  --c-control-border: #6e8582;
   --c-text: var(--n-900);
   --c-text-muted: var(--n-600);
   --c-scrim: rgb(14 26 29 / 0.42);

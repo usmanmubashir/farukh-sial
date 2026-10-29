@@ -2,6 +2,9 @@
 <html lang="en" dir="ltr" data-theme="auto">
 <head>
   <meta charset="utf-8">
+  <!-- Content Security Policy. Scripts come only from this site (no inline scripts, no eval). Styles allow inline
+       style="" attributes, which some screens use for measured sizes. Sync may call the Supabase project URL the owner enters. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' https:; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0f766e">
   <link rel="manifest" href="manifest.webmanifest">
@@ -15,33 +18,50 @@
   <link rel="stylesheet" href="css/layout.css">
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/dark.css">
-  <!-- Not needed for the first paint: loaded without blocking. The noscript copy keeps no-JS pages styled. -->
-  <link rel="stylesheet" href="css/animations.css" media="print" onload="this.media='all'">
-  <link rel="stylesheet" href="css/pages.css" media="print" onload="this.media='all'">
-  <noscript><link rel="stylesheet" href="css/animations.css"><link rel="stylesheet" href="css/pages.css"></noscript>
+  <link rel="stylesheet" href="css/animations.css">
+  <link rel="stylesheet" href="css/pages.css">
   <link rel="stylesheet" href="css/print.css" media="print">
   <link rel="preload" href="fonts/inter-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- The boot module graph is fetched in parallel instead of one import at a time. -->
-  <link rel="modulepreload" href="js/app.js">
-  <link rel="modulepreload" href="js/core/db.js">
-  <link rel="modulepreload" href="js/core/events.js">
-  <link rel="modulepreload" href="js/core/store.js">
-  <link rel="modulepreload" href="js/core/i18n.js">
-  <link rel="modulepreload" href="js/i18n/en.js">
-  <link rel="modulepreload" href="js/i18n/ur.js">
-  <link rel="modulepreload" href="js/core/money.js">
-  <link rel="modulepreload" href="js/core/dates.js">
-  <link rel="modulepreload" href="js/core/router.js">
+  <!-- modulepreload:start -->
   <link rel="modulepreload" href="js/core/anim.js">
   <link rel="modulepreload" href="js/core/auth.js">
+  <link rel="modulepreload" href="js/core/dates.js">
+  <link rel="modulepreload" href="js/core/db.js">
+  <link rel="modulepreload" href="js/core/events.js">
+  <link rel="modulepreload" href="js/core/i18n.js">
+  <link rel="modulepreload" href="js/core/money.js">
+  <link rel="modulepreload" href="js/core/numbers.js">
+  <link rel="modulepreload" href="js/core/resilience.js">
+  <link rel="modulepreload" href="js/core/router.js">
+  <link rel="modulepreload" href="js/core/store.js">
+  <link rel="modulepreload" href="js/core/sync-supabase.js">
   <link rel="modulepreload" href="js/core/sync.js">
   <link rel="modulepreload" href="js/core/ui.js">
+  <link rel="modulepreload" href="js/i18n/docs-en.js">
+  <link rel="modulepreload" href="js/i18n/docs-ur.js">
+  <link rel="modulepreload" href="js/i18n/en.js">
+  <link rel="modulepreload" href="js/i18n/parties-en.js">
+  <link rel="modulepreload" href="js/i18n/parties-ur.js">
+  <link rel="modulepreload" href="js/i18n/quality-en.js">
+  <link rel="modulepreload" href="js/i18n/quality-ur.js">
+  <link rel="modulepreload" href="js/i18n/reports-en.js">
+  <link rel="modulepreload" href="js/i18n/reports-ur.js">
+  <link rel="modulepreload" href="js/i18n/screens-en.js">
+  <link rel="modulepreload" href="js/i18n/screens-ur.js">
+  <link rel="modulepreload" href="js/i18n/settings-en.js">
+  <link rel="modulepreload" href="js/i18n/settings-ur.js">
+  <link rel="modulepreload" href="js/i18n/sync-en.js">
+  <link rel="modulepreload" href="js/i18n/sync-ur.js">
+  <link rel="modulepreload" href="js/i18n/ur.js">
+  <link rel="modulepreload" href="js/pages/_sync-sheet.js">
+  <link rel="modulepreload" href="js/services/errors.js">
   <link rel="modulepreload" href="js/services/ledger.js">
   <link rel="modulepreload" href="js/services/numbering.js">
+  <link rel="modulepreload" href="js/services/replication.js">
+  <link rel="modulepreload" href="js/services/rollups.js">
   <link rel="modulepreload" href="js/services/settings.js">
-  <link rel="modulepreload" href="js/services/errors.js">
-  <link rel="modulepreload" href="js/pages/_stub.js">
-  <link rel="modulepreload" href="js/pages/dashboard.js">
+  <!-- modulepreload:end -->
 </head>
 <body>
   <div id="app" class="app is-booting">

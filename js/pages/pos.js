@@ -10,7 +10,7 @@ import { parseRupees, percentOf, format } from '../core/money.js';
 import { todayISO } from '../core/dates.js';
 import { saleCards, alternativesInStock, cardForBarcode } from '../services/pos.js';
 import { batchRows } from '../services/stock.js';
-import { createSale, holdCart, listHeldCarts, resumeCart, discardHeldCart } from '../services/sales.js';
+import { createSale, holdCart, listHeldCarts, resumeCart, discardHeldCart, restoreHeldCart } from '../services/sales.js';
 import { listGroups } from '../services/products.js';
 import { listCustomers, createCustomer } from '../services/parties.js';
 import { addDemand } from '../services/demand.js';
@@ -319,7 +319,7 @@ function payBody() {
   const total = totalAmount();
   return `
     <form class="pay-form" novalidate>
-      <p class="pay-total"><span class="muted">${esc(t('pos.total'))}</span> <strong>${money(total)}</strong></p>
+      <p class="pay-total" aria-live="polite"><span class="muted">${esc(t('pos.total'))}</span> <strong>${money(total)}</strong></p>
       ${detailsRequired() ? `<div class="form-grid">
         <div class="float-field"><input name="patient" autocomplete="off" placeholder=" " value="${esc(state.patient)}"><label>${esc(t('pos.patient'))} *</label></div>
         <div class="float-field"><input name="doctor" autocomplete="off" placeholder=" " value="${esc(state.doctor)}"><label>${esc(t('pos.doctor'))} *</label></div>
@@ -578,9 +578,18 @@ async function openHolds() {
     await refreshHolds();
   });
   $body.on('click', '[data-discard]', async (event) => {
-    await discardHeldCart(event.currentTarget.getAttribute('data-discard'));
+    const cart = await discardHeldCart(event.currentTarget.getAttribute('data-discard'));
     dialog.close();
     await refreshHolds();
+    ui.toast(t('undo.discarded'), {
+      action: {
+        label: t('btn.undo'),
+        run: async () => {
+          await restoreHeldCart(cart);
+          await refreshHolds();
+        },
+      },
+    });
   });
 }
 
@@ -868,7 +877,7 @@ function shell() {
             <div class="field"><label>${esc(t('pos.doctor'))} *</label><input type="text" data-doctor></div>
           </div>
         </div>
-        <dl class="pos-totals">
+        <dl class="pos-totals" aria-live="polite">
           <div><dt>${esc(t('pos.subtotal'))}</dt><dd class="pos-subtotal"></dd></div>
           <div><dt>${esc(t('pos.discount'))}</dt><dd class="pos-discount-value"></dd></div>
           <div><dt>${esc(t('pos.tax'))}</dt><dd class="pos-tax-value"></dd></div>

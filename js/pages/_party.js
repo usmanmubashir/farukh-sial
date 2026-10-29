@@ -3,6 +3,7 @@
 //   owed > 0  : money due (customer owes us / we owe the supplier)
 //   owed < 0  : advance (customer has paid ahead / we have paid ahead to the supplier)
 import * as events from '../core/events.js';
+import { debounce } from '../core/resilience.js';
 import * as ui from '../core/ui.js';
 import { esc, money } from '../core/ui.js';
 import { t } from '../core/i18n.js';
@@ -197,9 +198,10 @@ export function partyListPage(kind) {
       $root.html('<div class="doc-root party-root"></div>');
       $host = $root.children('.doc-root');
       $host.html(shell());
+      const searchPaint = debounce(() => paint(), 150);
       $host.on('input', '.doc-search', (event) => {
         state.query = event.currentTarget.value;
-        paint();
+        searchPaint();
       });
       $host.on('click', '[data-status]', (event) => {
         state.status = event.currentTarget.getAttribute('data-status');

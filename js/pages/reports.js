@@ -2,6 +2,7 @@
 // animated chart where it helps, a sticky totals row, and a virtual table so 50,000 rows stay smooth.
 // Print and CSV use the same rows as the table, so a printout and a file always match the screen.
 import * as events from '../core/events.js';
+import { debounce } from '../core/resilience.js';
 import * as ui from '../core/ui.js';
 import { esc, icon, money } from '../core/ui.js';
 import { t } from '../core/i18n.js';
@@ -298,9 +299,10 @@ async function printReport() {
 /* ---------- Wiring ---------- */
 
 function bind() {
+  const searchPaint = debounce(() => paint(), 150);
   $host.on('input', '.rpt-search', (event) => {
     state.search = event.currentTarget.value;
-    paint();
+    searchPaint();
   });
   $host.on('click', '[data-period]', (event) => {
     $host.find('[data-period]').attr('aria-pressed', 'false');

@@ -108,6 +108,8 @@ export default {
   'auth.err.notSetup': 'Set up the app first.',
 
   'errors.generic': 'Something went wrong. Please try again.',
+  'errors.storageFull': 'This device is out of storage, so the change was not saved. Free some space, or back up and clear old data.',
+  'errors.unexpected': 'Something unexpected happened. It was written to this device’s error log.',
   'errors.notFoundTitle': 'Page not found',
   'errors.notFoundText': 'The page you are looking for does not exist.',
   'errors.dbUnavailable': 'The app could not open its local database. Use a current version of Chrome, Edge or Firefox, and turn off private browsing.',

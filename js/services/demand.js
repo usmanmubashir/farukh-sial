@@ -91,11 +91,20 @@ export function markOrdered(id) {
   });
 }
 
+/** Removes an open order line and returns it, so the screen can offer to put it back (restoreDemand). */
 export function removeDemand(id) {
   return db.transaction(async (ctx) => {
     const row = await ctx.get('demandList', id);
     if (!row) throw missing('demand', id);
     ctx.remove('demandList', id);
+    return row;
+  });
+}
+
+/** Puts a removed order line back exactly as it was. */
+export function restoreDemand(row) {
+  return db.transaction((ctx) => {
+    ctx.put('demandList', row);
   });
 }
 
