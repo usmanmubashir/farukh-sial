@@ -194,6 +194,7 @@
 
 .view {
   flex: 1;
+  min-width: 0;
   width: 100%;
   max-width: 1200px;
   margin-inline: auto;

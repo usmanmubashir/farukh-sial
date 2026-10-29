@@ -29,6 +29,12 @@ pages (js/pages)  ->  services (js/services)  ->  db (js/core/db.js)  ->  Indexe
 | `purchases.js` | createPurchase with cost and MRP maintenance |
 | `returns.js` | Sale returns (restores the original batches) and purchase returns (including expired stock) |
 | `demand.js` | Order list: auto low-stock, search misses, manual adds, WhatsApp text and link |
+| `dashboard.js` | Home screen numbers in one read: today's hero, attention counts, overview, seven-day chart, top medicines |
+| `seed-medicines.js` | Popular medicines to import (about 190 entries, no prices). Review brands and packs before relying on them |
+
+Stock views: `stock.batchRows()` gives each batch's stock, value at cost and retail, days to expiry, expiry bucket and the purchase line it came from. `returns.returnExpiredBatches()` uses it to send expired stock back to suppliers.
+
+Screens for medicines live in `js/pages`: `products.js` (Medicines), `stock.js`, `expiry.js`, `dashboard.js`. Their shared pieces are `_medicine-shared.js` (filters, search, stock line), `_medicine-form.js` (the new/edit form, a bottom sheet on phones) and `_medicine-dialogs.js` (groups, barcode entry). The medicine form's copy lives in `js/i18n/screens-en.js` and `screens-ur.js`, which `i18n.js` merges over the base dictionaries.
 
 **Transactions.** Each public function runs one `db.transaction()`. Functions named `...In(ctx, ...)` take the caller's context, so a sale can allocate stock, write the document, and post the ledger in the same transaction. Any throw rolls everything back: stock, numbers, ledger and outbox. `ctx.nextNumber` runs inside that transaction too, so a failed sale leaves no gap in the numbering.
 

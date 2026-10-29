@@ -561,6 +561,65 @@
       eq('removed row leaves the list', (await demand.listOpen()).length, remaining.length - 1);
     }
 
+    /* ---------- 8. medicines, expiry and dashboard ---------- */
+
+    async function medicinesGroup() {
+      const { expiryFromInput } = await import('../js/core/dates.js');
+      const { popularMedicines } = await import('../js/services/seed-medicines.js');
+      const { getDashboard } = await import('../js/services/dashboard.js');
+
+      eq('MM/YY 02/28 is the last day of February 2028 (leap year)', expiryFromInput('02/28'), '2028-02-29');
+      eq('invalid month rejected', expiryFromInput('13/28'), null);
+
+      const seed = popularMedicines();
+      const first = await products.importProducts(seed);
+      eq('seed import accounts for every row', first.added + first.skipped, seed.length);
+      const again = await products.importProducts(seed);
+      eq('importing the seed twice adds nothing', again.added, 0);
+
+      const code = products.generateBarcode();
+      ok('generated barcode is 13 digits', /^\d{13}$/.test(code));
+      const digits = code.split('').map(Number);
+      const weighted = digits.slice(0, 12).reduce((total, d, i) => total + d * (i % 2 === 0 ? 1 : 3), 0);
+      eq('generated barcode has a valid check digit', (10 - (weighted % 10)) % 10, digits[12]);
+
+      const pan = await products.createProduct({ name: 'Test Panadol', code: 'TP1', soldAs: 'strip', unitsPerPack: 10, mrpPerPack: 4000, salePricePerPack: 4000, costPerPack: 3000 });
+      eq('sale price defaults from MRP when given', pan.salePricePerPack, 4000);
+      await stock.addBatch({ productId: pan.id, batchNo: 'E1', expiry: isoIn(20), packs: 2, costPerPack: 3000 });
+      await stock.addBatch({ productId: pan.id, batchNo: 'E2', expiry: isoIn(-5), packs: 1, costPerPack: 3000 });
+      const rows = await stock.batchRows({ productId: pan.id, today });
+      eq('batch rows come earliest expiry first', rows.map((r) => r.batchNo), ['E2', 'E1']);
+      eq('expired batch is in the expired bucket', rows[0].bucket, 'expired');
+      eq('batch 20 days out is in the 30-day bucket', rows[1].bucket, 'd30');
+      eq('batch value is at cost', rows[1].costValue, 6000);
+
+      const dash = await getDashboard({ today });
+      eq('dashboard counts the expired batch', dash.attention.expired, 1);
+      eq('dashboard counts the 30-day batch', dash.attention.expiring30, 1);
+
+      // A purchase from a supplier, then its batch goes past expiry: the expired stock goes back.
+      const sup = await parties.createSupplier({ name: 'Test Supplier' });
+      const bought = await purchases.createPurchase({
+        supplierId: sup.id,
+        items: [{ productId: pan.id, batchNo: 'E3', expiry: monthYear(6), packs: 3, costPerPack: 3000, mrp: 4000 }],
+        paid: 0,
+      });
+      const line = (await purchases.getPurchaseWithItems(bought.id)).items[0];
+      await db.transaction(async (ctx) => {
+        const row = await ctx.get('batches', line.batchId);
+        ctx.put('batches', { ...row, expiry: isoIn(-3) });
+      });
+      eq('payable before the return', await ledger.partyBalance(sup.id, '2000'), -9000);
+      const sent = await returns.returnExpiredBatches([line.batchId], { today });
+      eq('one supplier return is created', sent.created, 1);
+      eq('the returned batch is empty', (await stock.batchRows({ productId: pan.id, today, withStockOnly: false })).find((r) => r.batchId === line.batchId).units, 0);
+      eq('supplier payable reduced by the returned value', await ledger.partyBalance(sup.id, '2000'), 0);
+
+      const orphan = await returns.returnExpiredBatches([rows[0].batchId], { today });
+      eq('opening stock with no purchase cannot be returned', [orphan.created, orphan.noPurchase], [0, 1]);
+      eq('whole book balances after returns', (await ledger.trialBalance()).balanced, true);
+    }
+
     /* ---------- runner ---------- */
 
     const groups = [
@@ -571,6 +630,7 @@
       ['purchases', purchasesGroup],
       ['returns', returnsGroup],
       ['demand list', demandGroup],
+      ['medicines, expiry and dashboard', medicinesGroup],
     ];
 
     const list = document.getElementById('results');

@@ -73,6 +73,7 @@ export async function createPurchaseIn(ctx, input) {
     const product = await ctx.get('products', line.productId);
     const patch = {};
     if (settings.updateCostFromLastPurchase) patch.costPerPack = line.costPerPack;
+    if (line.mrp > 0 && line.mrp !== product.mrpPerPack) patch.mrpPerPack = line.mrp;
     if (settings.updateSalePriceOnMrpChange && line.mrp > 0 && line.mrp !== product.salePricePerPack) {
       patch.salePricePerPack = line.mrp;
     }

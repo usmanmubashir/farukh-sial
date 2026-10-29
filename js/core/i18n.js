@@ -1,9 +1,14 @@
 // Translations and direction. Every visible string goes through t(key).
 // Switching language does not reload the page: the store notifies the UI.
-import en from '../i18n/en.js';
-import ur from '../i18n/ur.js';
+import enBase from '../i18n/en.js';
+import urBase from '../i18n/ur.js';
+import enScreens from '../i18n/screens-en.js';
+import urScreens from '../i18n/screens-ur.js';
 import * as store from './store.js';
 
+// Screen strings override the base dictionaries with the same key.
+const en = { ...enBase, ...enScreens };
+const ur = { ...urBase, ...urScreens };
 const DICTIONARIES = { en, ur };
 const RTL_LANGS = ['ur', 'ar', 'fa'];
 const STORAGE_KEY = 'shifa.lang';

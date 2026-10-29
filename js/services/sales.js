@@ -94,7 +94,8 @@ export async function createSaleIn(ctx, input) {
   const saleItems = [];
   let cost = 0;
   for (const line of lines) {
-    const allocations = await allocateFEFOIn(ctx, line.product.id, line.units, { today });
+    // Products that do not track stock (services, bundles) sell without allocating batches.
+    const allocations = line.product.trackStock === false ? [] : await allocateFEFOIn(ctx, line.product.id, line.units, { today });
     for (const a of allocations) {
       await applyMovementIn(ctx, {
         productId: line.product.id,

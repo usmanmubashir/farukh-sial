@@ -67,8 +67,18 @@
         <h1 class="page-title" id="page-title"></h1>
         <div class="header-actions">
           <span class="status-pill" id="net-status" role="status"></span>
-          <button type="button" class="btn btn-ghost btn-sm" id="lang-btn" data-i18n="lang.switch">اردو</button>
-          <button type="button" class="btn btn-ghost btn-sm" id="logout-btn" data-i18n="auth.logout" hidden>Log out</button>
+          <button type="button" class="pill-btn" id="lang-btn" data-i18n="lang.switch">اردو</button>
+          <div class="avatar-wrap" id="avatar-wrap">
+            <button type="button" class="avatar" id="avatar-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="avatar-menu" data-i18n-attr="aria-label:menu.account">
+              <span id="avatar-initials">?</span>
+            </button>
+            <div class="avatar-menu glass" id="avatar-menu" role="menu" hidden>
+              <p class="avatar-who" id="avatar-who"></p>
+              <button type="button" role="menuitem" class="menu-item" data-go="/settings" data-i18n="menu.settings">Settings</button>
+              <button type="button" role="menuitem" class="menu-item" id="menu-lang" data-i18n="menu.language">Language</button>
+              <button type="button" role="menuitem" class="menu-item danger" id="logout-btn" data-i18n="menu.logout">Log out</button>
+            </div>
+          </div>
         </div>
       </header>
 

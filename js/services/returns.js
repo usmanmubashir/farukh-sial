@@ -13,7 +13,7 @@ import * as db from '../core/db.js';
 import { todayISO } from '../core/dates.js';
 import { roundHalfAway, sum } from '../core/money.js';
 import { ServiceError, missing, optionalInt, requireInt } from './errors.js';
-import { applyMovementIn, costOfUnits } from './stock.js';
+import { applyMovementIn, batchRows, costOfUnits } from './stock.js';
 import { postEntryIn, purchaseReturnLines, saleReturnLines } from './ledger.js';
 import { nextDocNumber } from './numbering.js';
 
@@ -232,3 +232,38 @@ export function createPurchaseReturn(input) {
 }
 
 export const getReturn = (id) => db.get('returns', id);
+
+/**
+ * Sends expired batches back to their suppliers, one purchase return per purchase.
+ * Batches with no purchase line (opening stock) cannot be returned and are counted. Loose units that do
+ * not make a whole pack stay on the shelf. Walk-in purchases are refunded in cash, supplier purchases credit the payable.
+ */
+export async function returnExpiredBatches(batchIds, { today = todayISO() } = {}) {
+  const rows = (await batchRows({ today })).filter((row) => batchIds.includes(row.batchId));
+  const noPurchase = rows.filter((row) => !row.purchaseItemId).length;
+  const byPurchase = new Map();
+  let leftoverUnits = 0;
+  for (const row of rows) {
+    if (!row.purchaseItemId) continue;
+    leftoverUnits += row.units % row.unitsPerPack;
+    if (row.packs < 1) continue;
+    const list = byPurchase.get(row.purchaseId) ?? [];
+    list.push(row);
+    byPurchase.set(row.purchaseId, list);
+  }
+
+  let created = 0;
+  for (const [purchaseId, lines] of byPurchase) {
+    const purchase = await db.get('purchases', purchaseId);
+    const value = sum(lines.map((row) => row.packs * row.costPerPack));
+    await createPurchaseReturn({
+      purchaseId,
+      items: lines.map((row) => ({ purchaseItemId: row.purchaseItemId, packs: row.packs })),
+      refund: purchase?.supplierId ? 0 : value,
+      reason: 'Expired stock',
+      date: today,
+    });
+    created += 1;
+  }
+  return { created, noPurchase, leftoverUnits };
+}

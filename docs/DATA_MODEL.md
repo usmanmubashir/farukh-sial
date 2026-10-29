@@ -67,6 +67,26 @@ System accounts are undeletable. The service layer enforces that when delete is 
 
 Inventory is perpetual. Purchases debit Inventory, and sales move cost from Inventory to COGS. Purchases (5000) and Purchase Returns (5100) are seeded for reports and are not used by posting yet.
 
+## Medicine fields (products)
+
+Added for the Medicines screen, on top of the pack model below.
+
+| Field | Meaning |
+|---|---|
+| `nameUr` | Urdu name, shown in grey under the English name |
+| `strength`, `form` | e.g. `500mg`, `tablet` (form list in `FORMS`, products.js) |
+| `mrpPerPack` | printed MRP per pack, paisa. Purchases with a new MRP update it. |
+| `salePricePerPack` | price charged per pack. Defaults to the MRP. |
+| `wholesalePerPack` | optional wholesale price per pack |
+| `rack`, `group` | shelf location, and a group name from the device's group list (`settings.productGroups`) |
+| `directions` | usual directions, free text |
+| `trackStock` | `false` for services or items not counted: they sell without touching batches |
+| `photo` | small data URL, at most 150 KB |
+
+Settings keys added: `productGroups` (group names), `lastBackupAt` (set by the backup screen when it exists; the home screen's "No backup yet" nudge reads it).
+
+Popular medicines (`js/services/seed-medicines.js`) import without prices. Import skips a medicine already present with the same name and strength.
+
 ## Pack model (products)
 
 | Field | Meaning |

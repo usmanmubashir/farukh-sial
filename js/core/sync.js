@@ -23,6 +23,9 @@ export function useAdapter(next) {
   adapter = next ?? offlineAdapter;
 }
 
+/** True when a real sync server is configured. With only the offline adapter nothing is ever sent. */
+export const syncActive = () => adapter !== offlineAdapter;
+
 export async function refreshPending() {
   const pending = await db.count('outbox', { index: 'status', query: 'pending' });
   setState('syncPending', pending);

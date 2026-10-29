@@ -1,7 +1,11 @@
 // Product master with the pack model.
 //   A product is bought and stored in packs (strip, box, bottle...) and each pack holds unitsPerPack units
 //   (tablets, ml...). Stock is always kept in units, so a loose tablet sale is just a sale of fewer units.
-//   Prices: salePricePerPack (MRP per pack), looseUnitPrice (per unit, only when looseSelling).
+//   Prices (all paisa, all per ONE PACK unless named otherwise):
+//     mrpPerPack        printed MRP (what the pack says)
+//     salePricePerPack  what we charge; defaults to the MRP
+//     costPerPack       what we paid, updated from the latest purchase
+//     looseUnitPrice    per single unit, only when looseSelling
 import * as db from '../core/db.js';
 import { ServiceError, missing, optionalInt, requireInt, requireOneOf, requireText } from './errors.js';
 import { unitsOfProductIn } from './stock.js';
@@ -9,6 +13,8 @@ import { unitsOfProductIn } from './stock.js';
 export const CLASSES = ['otc', 'rx', 'controlled', 'general'];
 export const STORAGE = ['room', 'cool', 'fridge'];
 export const SOLD_AS = ['pack', 'strip', 'box', 'bottle', 'vial', 'tube', 'sachet', 'piece', 'ampoule'];
+export const FORMS = ['tablet', 'capsule', 'syrup', 'suspension', 'injection', 'cream', 'ointment', 'drops', 'inhaler', 'sachet', 'powder', 'gel', 'spray', 'other'];
+const PHOTO_LIMIT = 150 * 1024;
 
 export const keyOf = (text) => String(text ?? '').trim().toLowerCase();
 
@@ -16,10 +22,15 @@ export const keyOf = (text) => String(text ?? '').trim().toLowerCase();
 function normalise(input, base = {}) {
   const merged = { ...base, ...input };
   const name = requireText(merged.name, 'name');
+  const photo = merged.photo ? String(merged.photo) : null;
+  if (photo && photo.length > PHOTO_LIMIT) throw new ServiceError('photoTooLarge');
   const product = {
     code: String(merged.code ?? '').trim(),
     name,
     nameKey: keyOf(name),
+    nameUr: String(merged.nameUr ?? '').trim(),
+    strength: String(merged.strength ?? '').trim(),
+    form: requireOneOf(merged.form ?? 'tablet', FORMS, 'form'),
     generic: String(merged.generic ?? '').trim(),
     genericKey: keyOf(merged.generic),
     company: String(merged.company ?? '').trim(),
@@ -33,10 +44,17 @@ function normalise(input, base = {}) {
     packsPerBox: optionalInt(merged.packsPerBox, 'packsPerBox', 1, null),
     looseSelling: Boolean(merged.looseSelling),
     looseUnitPrice: optionalInt(merged.looseUnitPrice, 'looseUnitPrice', 0, 0),
+    mrpPerPack: optionalInt(merged.mrpPerPack, 'mrpPerPack', 0, 0),
     costPerPack: optionalInt(merged.costPerPack, 'costPerPack', 0, 0),
-    salePricePerPack: optionalInt(merged.salePricePerPack, 'salePricePerPack', 0, 0),
+    salePricePerPack: optionalInt(merged.salePricePerPack, 'salePricePerPack', 0, merged.mrpPerPack ?? 0),
+    wholesalePerPack: optionalInt(merged.wholesalePerPack, 'wholesalePerPack', 0, 0),
     reorderLevel: optionalInt(merged.reorderLevel, 'reorderLevel', 0, 0),
     reorderQty: optionalInt(merged.reorderQty, 'reorderQty', 0, 0),
+    rack: String(merged.rack ?? '').trim(),
+    group: String(merged.group ?? '').trim(),
+    directions: String(merged.directions ?? '').trim(),
+    trackStock: merged.trackStock !== false,
+    photo,
     active: merged.active !== false,
   };
   if (product.looseSelling) {
@@ -96,6 +114,29 @@ export async function listProducts({ includeInactive = false } = {}) {
   return rows.filter((p) => includeInactive || p.active).sort(byName);
 }
 
+/** Every product with its stock from movements: units, whole packs and loose units. */
+export async function listWithStock({ includeInactive = true } = {}) {
+  const [products, movements] = await Promise.all([db.getAll('products'), db.getAll('stockMovements')]);
+  const totals = new Map();
+  for (const row of movements) totals.set(row.productId, (totals.get(row.productId) ?? 0) + row.units);
+  return products
+    .filter((p) => includeInactive || p.active !== false)
+    .map((p) => {
+      const units = totals.get(p.id) ?? 0;
+      const perPack = p.unitsPerPack || 1;
+      return {
+        ...p,
+        soldAs: p.soldAs || 'pack',
+        unitName: p.unitName || 'unit',
+        unitsPerPack: perPack,
+        units,
+        packs: Math.trunc(units / perPack),
+        looseUnits: units % perPack,
+      };
+    })
+    .sort(byName);
+}
+
 /**
  * Search across name, salt (generic), company, barcode and code. Ranking: exact barcode or code first,
  * then prefix matches, then anywhere in the text. Case-insensitive.
@@ -126,4 +167,48 @@ export async function alternatives(productId) {
   if (!product || !product.genericKey) return [];
   const same = await db.getAll('products', { index: 'generic', query: product.genericKey });
   return same.filter((p) => p.id !== productId && p.active).sort(byName);
+}
+
+/**
+ * Bulk import (the popular-medicines seed). One transaction. A medicine already in the list
+ * (same name and strength, case-insensitive) is skipped, so importing twice adds nothing.
+ */
+export function importProducts(list) {
+  return db.transaction(async (ctx) => {
+    const existing = await ctx.getAll('products');
+    const seen = new Set(existing.map((p) => `${p.nameKey}|${keyOf(p.strength)}`));
+    let added = 0;
+    let skipped = 0;
+    for (const input of list) {
+      const product = normalise({ ...input, active: true });
+      const key = `${product.nameKey}|${keyOf(product.strength)}`;
+      if (seen.has(key)) {
+        skipped += 1;
+        continue;
+      }
+      seen.add(key);
+      ctx.put('products', { ...product, id: db.newId() });
+      added += 1;
+    }
+    return { added, skipped };
+  });
+}
+
+/** Internal barcode: 13 digits, starting with 2 (store-internal range in GS1), with a valid check digit. */
+export function generateBarcode() {
+  const digits = ['2', ...Array.from({ length: 11 }, () => Math.floor(Math.random() * 10))];
+  const sum = digits.reduce((total, d, i) => total + d * (i % 2 === 0 ? 1 : 3), 0);
+  digits.push((10 - (sum % 10)) % 10);
+  return digits.join('');
+}
+
+/* ---------- Groups (device-local list of names; products carry the name) ---------- */
+
+export async function listGroups() {
+  return db.getSetting('productGroups', []);
+}
+
+export function saveGroups(names) {
+  const clean = [...new Set(names.map((n) => String(n).trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  return db.setSetting('productGroups', clean).then(() => clean);
 }

@@ -13,7 +13,7 @@
 // Functions ending in "In" take the caller's transaction context (ctx), so services can compose several
 // writes atomically. The plain names run their own transaction.
 import * as db from '../core/db.js';
-import { expiryState, expiryFromInput, todayISO } from '../core/dates.js';
+import { expiryState, expiryFromInput, parseISODate, todayISO } from '../core/dates.js';
 import { roundHalfAway, sum } from '../core/money.js';
 import { ServiceError, missing, optionalInt, requireInt, requireText } from './errors.js';
 import { postEntryIn, adjustmentLines } from './ledger.js';
@@ -301,4 +301,76 @@ export async function checkIntegrity() {
   }
   const orphanMovements = movements.filter((m) => !known.has(m.batchId)).length;
   return { ok: mismatches.length === 0 && orphanMovements === 0, checkedBatches: batches.length, mismatches, orphanMovements };
+}
+
+/* ---------- Views for the Stock and Expiry screens ---------- */
+
+/** Days from `from` to `to` (negative when `to` is in the past). */
+export function daysBetween(from, to) {
+  return Math.round((parseISODate(to) - parseISODate(from)) / 86400000);
+}
+
+/** Expiry bucket for a number of days left: expired, d30, d60, d90, m6 (91-180) or later. */
+export function bucketOf(days) {
+  if (days < 0) return 'expired';
+  if (days <= 30) return 'd30';
+  if (days <= 60) return 'd60';
+  if (days <= 90) return 'd90';
+  if (days <= 180) return 'm6';
+  return 'later';
+}
+
+/** Manual adjustments for one product, newest first: units, reason and date. */
+export async function adjustmentHistory(productId) {
+  const rows = await db.getAll('stockMovements', { index: 'productId', query: productId });
+  return rows
+    .filter((row) => row.type === 'adjust')
+    .sort((a, b) => (b.date ?? '').localeCompare(a.date ?? '') || (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
+    .map((row) => ({ id: row.id, units: row.units, note: row.note ?? '', date: row.date, batchId: row.batchId }));
+}
+
+/**
+ * Batch rows with their stock from movements, value at cost and retail, days to expiry, and the purchase
+ * line they came from (purchaseItemId), which a supplier return needs. Sorted first-expiry-first.
+ */
+export async function batchRows({ productId = null, withStockOnly = true, today = todayISO() } = {}) {
+  const [batches, movements, purchaseItems, products] = await Promise.all([
+    productId ? db.getAll('batches', { index: 'productId', query: productId }) : db.getAll('batches'),
+    db.getAll('stockMovements'),
+    db.getAll('purchaseItems'),
+    db.getAll('products'),
+  ]);
+  const totals = sumBy(movements, 'batchId', 'units');
+  const purchaseByBatch = new Map(purchaseItems.map((pi) => [pi.batchId, pi]));
+  const productById = new Map(products.map((p) => [p.id, p]));
+
+  return batches
+    .map((b) => {
+      const product = productById.get(b.productId);
+      const perPack = product?.unitsPerPack ?? 1;
+      const units = totals.get(b.id) ?? 0;
+      const line = purchaseByBatch.get(b.id);
+      const days = daysBetween(today, b.expiry);
+      return {
+        batchId: b.id,
+        productId: b.productId,
+        productName: product?.name ?? '',
+        product,
+        batchNo: b.batchNo,
+        expiry: b.expiry,
+        units,
+        unitsPerPack: perPack,
+        packs: Math.trunc(units / perPack),
+        looseUnits: units % perPack,
+        costPerPack: b.costPerPack ?? 0,
+        costValue: costOfUnits(b.costPerPack ?? 0, perPack, units),
+        retailValue: costOfUnits(product?.salePricePerPack ?? 0, perPack, units),
+        days,
+        bucket: bucketOf(days),
+        purchaseItemId: line?.id ?? null,
+        purchaseId: line?.purchaseId ?? null,
+      };
+    })
+    .filter((row) => !withStockOnly || row.units > 0)
+    .sort((a, b) => a.expiry.localeCompare(b.expiry) || a.batchNo.localeCompare(b.batchNo));
 }
