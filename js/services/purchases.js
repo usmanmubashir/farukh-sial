@@ -8,12 +8,13 @@ import { expiryFromInput, todayISO } from '../core/dates.js';
 import { sum } from '../core/money.js';
 import { ServiceError, missing, optionalInt, requireInt, requireText } from './errors.js';
 import { addBatchIn } from './stock.js';
-import { postEntryIn, purchaseLines } from './ledger.js';
+import { ACCOUNT, postEntryIn, purchaseLines, requirePaymentAccount } from './ledger.js';
 import { nextDocNumber } from './numbering.js';
 import { readSettingsIn } from './settings.js';
 
 /**
- * input: { supplierId, items: [{ productId, batchNo, expiry, packs, costPerPack, mrp }], paid, date, today, note }
+ * input: { supplierId, items: [{ productId, batchNo, expiry, packs, costPerPack, mrp }], paid, payFrom, date, today, note }
+ * payFrom is the money account the paid part leaves from (cash by default).
  * paid defaults to the full total. The rest goes to the supplier payable (a supplier is required for that).
  */
 export async function createPurchaseIn(ctx, input) {
@@ -51,6 +52,9 @@ export async function createPurchaseIn(ctx, input) {
   if (paid > total) throw new ServiceError('overpaid', { total, paid });
   const balance = total - paid;
   if (balance > 0 && !supplier) throw new ServiceError('supplierRequiredForCredit');
+  // The money leaves the cash drawer, or the bank or wallet the buyer picked (payFrom).
+  const cashAccount = input.payFrom || ACCOUNT.cash;
+  if (paid > 0) await requirePaymentAccount(ctx, cashAccount);
 
   // 3. Stock in, one batch per line, and price maintenance.
   const purchaseId = db.newId();
@@ -108,6 +112,7 @@ export async function createPurchaseIn(ctx, input) {
     balance,
     note: String(input.note ?? '').trim(),
     returnedValue: 0,
+    payFrom: cashAccount,
   });
   for (const item of items) ctx.put('purchaseItems', item);
 
@@ -116,7 +121,7 @@ export async function createPurchaseIn(ctx, input) {
     docType: 'purchase',
     docId: purchaseId,
     memo: number,
-    lines: purchaseLines({ total, paid, balance, supplierId }),
+    lines: purchaseLines({ total, paid, balance, supplierId, cashAccount }),
   });
   return { ...purchase, items, entryId };
 }

@@ -32,6 +32,8 @@ export const DEFAULT_SETTINGS = {
     payment: 'PAY',
     transfer: 'TRF',
     adjustment: 'ADJ',
+    expense: 'EXP',
+    income: 'INC',
   },
 };
 

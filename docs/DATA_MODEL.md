@@ -28,20 +28,20 @@ Every write goes through `db.transaction()`, which also queues synced rows in `o
 | products | id | name(nameKey), generic(genericKey), company(companyKey), barcode, code | yes | Product master (fields below) |
 | batches | id | productId, productExpiry[productId, expiry] | yes | `batchNo`, `expiry` (ISO, last day of month for MM/YY), `costPerPack`, `mrp`, `receivedAt`, `onHand` (cache) |
 | stockMovements | id | batchId, productId, date | yes | `units` (signed), `type`, `docType`, `docId`, `date`, `note`. Source of truth. |
-| customers | id | name(nameKey), phone | yes | `name`, `phone`, `address` |
-| suppliers | id | name(nameKey), phone | yes | `name`, `phone`, `address` |
-| sales | id | date, customerDate[customerId, date], number (unique) | yes | Sale header: subtotal, discount, tax, total, paid, paidCash, paidBank, tendered, change, balance, cost, profit, patient, doctor, payments[] (method cash, card, bank or mobile), status, returnedTotal |
+| customers | id | name(nameKey), phone | yes | `name`, `phone`, `email`, `address`, `note`, `active` (false = inactive; missing counts as active). Balance is in the ledger (account 1100) |
+| suppliers | id | name(nameKey), phone | yes | `name`, `phone`, `email`, `address`, `note`, `active`. Balance is in the ledger (account 2000) |
+| sales | id | date, customerDate[customerId, date], number (unique) | yes | Sale header: subtotal, discount, tax, total, paid, paidCash, paidBank, tendered, change, balance, cost, profit, patient, doctor, payments[] (method cash, card, bank or mobile, and accountCode for anything but cash: the bank or wallet account it went to), status, returnedTotal |
 | saleItems | id | saleId, productId | yes | `packs`, `looseUnits`, `units`, `amount`, `cost`, `unitPricePack`, `unitPriceLoose`, `lineDiscount`, `strength`, `class`, `allocations[]` (batch, units, costPerPack, returnedUnits), `returnedUnits`, `returnedAmount` |
 | rxRegister | id | saleId, date, productId | yes (v2) | One row per Rx or controlled line: `saleNumber`, `date`, `customerId`, `productId`, `productName`, `strength`, `class`, `units`, `batches[]`, `patient`, `doctor`. Removed when its sale is voided |
-| purchases | id | date, supplierDate[supplierId, date], number (unique) | yes | Purchase header: total, paid, balance, returnedValue |
+| purchases | id | date, supplierDate[supplierId, date], number (unique) | yes | Purchase header: total, paid, balance, returnedValue, payFrom (the money account the paid part left from; cash by default) |
 | purchaseItems | id | purchaseId, productId | yes | `batchId`, `batchNo`, `expiry`, `packs`, `units`, `costPerPack`, `mrp`, `amount`, `returnedPacks` |
 | returns | id | date, typeDate[type, date], number (unique) | yes | `type`: `sale` (SRN) or `purchase` (PRN). gross, tax, net, refund, credit, cost, entryId |
 | returnItems | id | returnId, productId | yes | Return lines. Sale returns list the batches restored. |
-| accounts | id | code (unique) | yes | Chart of accounts. System rows have `system: true` and fixed ids (`acc-1000`...). Bank (`1010`) is a system account; card, bank transfer and wallet receipts post there, cash posts to `1000`. |
+| accounts | id | code (unique) | yes | Chart of accounts. System rows have `system: true` and fixed ids (`acc-1000`...). `kind`: cash (1000), bank (1010, and any added bank), wallet (added wallets), or null for the rest. Added bank and wallet accounts take codes 1011–1099 and have `note`. Money accounts can receive sales, receipts and transfers, and pay purchases, supplier payments and expenses. |
 | ledgerEntries | id | accountDate[accountId, date], date, doc[docType, docId] | yes | One row per line: `entryId`, `accountCode`, `partyId`, `debit`, `credit`, `docType`, `docId`, `memo` |
-| vouchers | id | date, number (unique) | yes | `type`: receipt (RCV), payment (PAY), transfer (TRF), adjustment (ADJ) |
+| vouchers | id | date, number (unique) | yes | `type`: receipt (RCV), payment (PAY), expense (EXP), income (INC), transfer (TRF), adjustment (ADJ). Each has `amount`, `entryId`, `note`, and the accounts it used (`accountCode` and `fromCode`/`toCode`, or `partyId` for receipts and payments) |
 | demandList | id | productId, status | yes | `name`, `nameKey`, `packs`, `reason` (low_stock, not_found, manual), `status` (open, ordered), `note`, `supplierId` (preferred supplier, optional; set from the order list) |
-| settings | key | — | no | `{ key, value }`. Keys: `pharmacyName`, `deviceId`, `session`, `business` (business rules), `heldCarts` (parked carts). Business rules that the sale screen reads: `rxRequiresPatientDoctor` (true), `voidSameDayOnly` (true), `allowPriceEdit` (true), `receiptWidth` (80 or 58 mm), `receiptShowBatch` (false), `receiptShowDirections` (true), `devicePrefix`, `productGroups` |
+| settings | key | — | no | `{ key, value }`. Keys: `pharmacyName`, `deviceId`, `session`, `business` (business rules), `heldCarts` (parked carts). Business rules that the sale screen reads: `rxRequiresPatientDoctor` (true), `voidSameDayOnly` (true), `allowPriceEdit` (true), `receiptWidth` (80 or 58 mm), `receiptShowBatch` (false), `receiptShowDirections` (true), `devicePrefix`, `productGroups`. Document prefixes (`docPrefixes`): SALE, PUR, SRN, PRN, RCV, PAY, EXP, INC, TRF, ADJ |
 | counters | key | — | no | `{ key, value }`. Last issued number per sequence |
 | syncState | key | — | no | Sync cursor and adapter state |
 | outbox | seq (auto) | status | no | `{ store, op: 'put' \| 'delete', key, record?, status, createdAt, attempts }` |

@@ -27,7 +27,7 @@ const MORE = [
   { key: 'purchases', path: '/purchases', icon: 'purchase' },
   { key: 'suppliers', path: '/suppliers', icon: 'suppliers' },
   { key: 'returns', path: '/returns', icon: 'returns' },
-  { key: 'cashBook', path: '/cash-book', icon: 'bank' },
+  { key: 'cashBook', path: '/vouchers', icon: 'bank' },
   { key: 'reports', path: '/reports', icon: 'reports' },
   { key: 'settings', path: '/settings', icon: 'settings' },
 ];

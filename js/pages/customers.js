@@ -1,3 +1,5 @@
-import { stubPage } from './_stub.js';
+// Customers: who owes the pharmacy. Balances come from the ledger (account 1100).
+import { partyListPage } from './_party.js';
 
-export const { route, title, render, destroy } = stubPage('/customers', 'nav.customers');
+const page = partyListPage('customer');
+export const { route, title, render, destroy } = page;

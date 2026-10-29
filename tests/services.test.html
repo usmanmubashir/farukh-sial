@@ -749,6 +749,80 @@
       eq('whole book balances after the document cycle', (await ledger.trialBalance()).balanced, true);
     }
 
+    /* ---------- 11. parties, cash book and accounts ---------- */
+
+    async function partiesGroup() {
+      const pan = await products.createProduct({
+        name: 'Panadol 500mg', generic: 'Paracetamol', code: 'PAN500', soldAs: 'strip', unitsPerPack: 10,
+        costPerPack: 2000, salePricePerPack: 4000, mrpPerPack: 4000,
+      });
+      await stock.addBatch({ productId: pan.id, batchNo: 'P-1', expiry: monthYear(12), packs: 10, costPerPack: 2000, mrp: 4000 });
+
+      // Opening balances: positive is owed, negative is an advance. The as-of date is kept.
+      const owing = await parties.addParty({ kind: 'customer', name: 'Ahmed Raza', phone: '0301', openingAmount: 50000, asOf: isoIn(-30) });
+      const advance = await parties.addParty({ kind: 'customer', name: 'Bilal', openingAmount: -2000 });
+      const supplier = await parties.addParty({ kind: 'supplier', name: 'Sami', openingAmount: 9000 });
+      const summaries = await parties.partySummaries('customer');
+      eq('customer with an opening balance owes it', summaries.rows.find((r) => r.id === owing.id).owed, 50000);
+      eq('customer with a negative opening is an advance', summaries.rows.find((r) => r.id === advance.id).owed, -2000);
+      eq('total receivable nets the advance', summaries.totalOwed, 48000);
+      eq('supplier opening is money we owe', (await parties.partySummaries('supplier')).rows[0].owed, 9000);
+      eq('statement carries the opening entry', (await parties.partyStatement('customer', owing.id)).rows[0].docType, 'opening');
+
+      // Udhaar: a credit sale, then a receipt clears the customer balance.
+      await sales.createSale({ customer: owing.id, items: [{ productId: pan.id, packs: 1 }], payments: [] });
+      eq('credit sale adds to the balance', (await parties.partySummaries('customer')).rows.find((r) => r.id === owing.id).owed, 54000);
+      const receipt = await ledger.receiptVoucher({ amount: 54000, partyId: owing.id });
+      eq('receipt voucher numbered RCV', receipt.number, 'RCV-0001');
+      eq('receipt clears the customer balance', await ledger.partyBalance(owing.id, '1100'), 0);
+      await fails('receipt into a non-money account rejected', () => ledger.receiptVoucher({ amount: 100, partyId: owing.id, accountCode: '4000' }), 'invalidAccount');
+
+      // Bank and wallet accounts: added with an opening balance, then used for a sale and a payment.
+      const wallet = await ledger.addPaymentAccount({ name: 'Easypaisa', kind: 'wallet', openingBalance: 10000 });
+      eq('new wallet gets the next free code', wallet.code, '1011');
+      eq('wallet holds its opening balance', (await ledger.accountBalance('1011')).balance, 10000);
+      eq('payment options include the wallet', (await ledger.paymentAccounts({ includeCash: false })).map((a) => a.code).sort(), ['1010', '1011']);
+      const bank = await ledger.addPaymentAccount({ name: 'Overdraft', kind: 'bank', openingBalance: -500 });
+      eq('negative opening is an overdraft', (await ledger.accountBalance(bank.code)).balance, -500);
+
+      const paidWallet = await sales.createSale({ items: [{ productId: pan.id, packs: 1 }], payments: [{ method: 'mobile', amount: 4000, accountCode: '1011' }] });
+      eq('sale paid by wallet lands in the wallet', (await ledger.accountBalance('1011')).balance, 14000);
+      eq('sale payment records its account', (await sales.getSale(paidWallet.id)).payments[0].accountCode, '1011');
+      await fails('sale cannot take payment into an expense account', () => sales.createSale({ items: [{ productId: pan.id, packs: 1 }], payments: [{ method: 'bank', amount: 4000, accountCode: '6000' }] }), 'invalidAccount');
+
+      const supplierPay = await ledger.paymentVoucher({ amount: 4000, partyId: supplier.id, accountCode: '1011' });
+      eq('payment voucher numbered PAY', supplierPay.number, 'PAY-0001');
+      eq('paying a supplier reduces the payable', await ledger.partyBalance(supplier.id, '2000'), -5000);
+      eq('paying from the wallet reduces it', (await ledger.accountBalance('1011')).balance, 10000);
+
+      // Purchase of 10000, 6000 paid from the wallet, 4000 owed to the supplier.
+      await purchases.createPurchase({ supplierId: supplier.id, payFrom: '1011', paid: 6000, items: [{ productId: pan.id, batchNo: 'P-2', expiry: monthYear(12), packs: 5, costPerPack: 2000, mrp: 4000 }] });
+      eq('purchase paid from the wallet', (await ledger.accountBalance('1011')).balance, 4000);
+      eq('purchase balance goes to the supplier', await ledger.partyBalance(supplier.id, '2000'), -9000);
+
+      // Expenses and other income are posted, and transfers move money between money accounts.
+      const expense = await ledger.expenseVoucher({ amount: 1500, fromCode: '1011', note: 'electricity' });
+      eq('expense voucher numbered EXP', expense.number, 'EXP-0001');
+      eq('expense leaves the account it was paid from', (await ledger.accountBalance('1011')).balance, 2500);
+      eq('expense shows in the expense account', (await ledger.accountBalance('6000')).balance, 1500);
+      const income = await ledger.incomeVoucher({ amount: 300, toCode: '1000' });
+      eq('income voucher numbered INC', income.number, 'INC-0001');
+      await fails('expense must use an expense account', () => ledger.expenseVoucher({ amount: 100, expenseCode: '1000' }), 'invalidAccount');
+      const moved = await ledger.transfer({ amount: 1000, fromCode: '1011', toCode: '1000' });
+      eq('transfer voucher numbered TRF', moved.number, 'TRF-0001');
+      eq('transfer moves money into cash (receipt 54000 + income 300 + transfer 1000)', (await ledger.accountBalance('1000')).balance, 55300);
+      await fails('transfer to the same account rejected', () => ledger.transfer({ amount: 1, fromCode: '1000', toCode: '1000' }), 'invalidField');
+
+      // Vouchers list, party statement and deactivation.
+      eq('voucher list by type', (await ledger.listVouchers({ type: 'expense' })).length, 1);
+      eq('statement closes at zero after the receipt', (await parties.partyStatement('customer', owing.id)).owed, 0);
+      await parties.setPartyActive('customer', advance.id, false);
+      eq('inactive customers drop out of the default list', (await parties.partySummaries('customer')).rows.some((r) => r.id === advance.id), false);
+      eq('inactive customers stay in the full list', (await parties.partySummaries('customer', { includeInactive: true })).rows.some((r) => r.id === advance.id), true);
+
+      eq('whole book balances with banks, wallets and vouchers', (await ledger.trialBalance()).balanced, true);
+    }
+
     /* ---------- runner ---------- */
 
     const groups = [
@@ -762,6 +836,7 @@
       ['medicines, expiry and dashboard', medicinesGroup],
       ['sale screen', posGroup],
       ['documents and trace', documentsGroup],
+      ['parties, cash book and accounts', partiesGroup],
     ];
 
     const list = document.getElementById('results');

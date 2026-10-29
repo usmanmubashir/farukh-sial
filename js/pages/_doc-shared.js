@@ -82,6 +82,7 @@ export const SERVICE_CODES = [
   'emptyPurchase', 'expiredBatch', 'supplierRequiredForCredit', 'overpaid', 'invalidField', 'required', 'notFound',
   'productInactive', 'emptyReturn', 'returnExceedsSold', 'returnExceedsBought', 'refundExceedsReturn',
   'walkInRefundMustMatch', 'saleVoided', 'insufficientStock', 'batchExpired',
+  'invalidAccount', 'noFreeAccountCode', 'unknownAccount',
 ];
 
 /** The message for a service error: its own text when the code is known, otherwise a generic one. */

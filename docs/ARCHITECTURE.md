@@ -21,10 +21,10 @@ pages (js/pages)  ->  services (js/services)  ->  db (js/core/db.js)  ->  Indexe
 | `errors.js` | `ServiceError` with a stable `code`, plus validators (`requireInt`, `optionalInt`, `requireText`, `requireOneOf`) |
 | `settings.js` | Business rules with defaults (`business` row). Read in-transaction with `readSettingsIn(ctx)` |
 | `numbering.js` | `nextDocNumber(ctx, kind)`: SALE-0001, optional device prefix |
-| `parties.js` | Customers and suppliers. Balances come from the ledger, not from the row |
+| `parties.js` | Customers and suppliers: add with an opening balance (negative = advance), active flag, party balances and statements. Balances come from the ledger, never from the row |
 | `products.js` | Product master: pack model, validation, unique code and barcode, search, alternatives |
 | `stock.js` | Batches, FEFO allocation, movements, adjustments, lowStock, outOfStock, expiringSoon, recalculateStock, checkIntegrity |
-| `ledger.js` | Chart of accounts, `postEntryIn` (balanced or throws), line builders per document type, vouchers, balances, trial balance |
+| `ledger.js` | Chart of accounts and money accounts (cash, banks, wallets: `addPaymentAccount`, `paymentAccounts`), `postEntryIn` (balanced or throws), line builders per document type, vouchers (receipt, payment, expense, income, transfer), balances, party balances, trial balance |
 | `sales.js` | createSale, voidSale, hold and resume carts |
 | `purchases.js` | createPurchase with cost and MRP maintenance |
 | `returns.js` | Sale returns (restores the original batches) and purchase returns (including expired stock) |
@@ -48,7 +48,7 @@ Screens for medicines live in `js/pages`: `products.js` (Medicines), `stock.js`,
 
 **Sale screen (`js/pages/pos.js`).** Typing filters the card list. Enter adds the top card (Shift+Enter as loose units, `3*name` for a quantity). Enter presses and F4 go through one queue (`searchQueue`), so a line typed just before F4 is in the cart before the pay sheet opens. The search box is cleared at the moment Enter is pressed, so keys typed during the add start from an empty box. Each search has its own sequence number, so an older result cannot overwrite a newer one. Rx and controlled lines ask for patient and doctor on the pay sheet. Product cards are not in the Tab order (`tabindex="-1"`); ArrowDown from the search box moves into the grid. Dialogs opened by the page close when the user leaves it.
 
-**Tests.** `tests/services.test.html` runs against its own database (`shifa-services-test`), so it never touches the app's data. It has 246 assertions across products, stock/FEFO, ledger, sales, purchases, returns, demand, medicines/dashboard, the sale screen (cards, FEFO override, expired batch refusal, bank split, change, discounts, price edit setting, Rx register) and the document cycle (purchase, sale, sale return, purchase return, batch trace, return list, order list text).
+**Tests.** `tests/services.test.html` runs against its own database (`shifa-services-test`), so it never touches the app's data. It has 280 assertions across products, stock/FEFO, ledger, sales, purchases, returns, demand, medicines/dashboard, the sale screen (cards, FEFO override, expired batch refusal, bank split, change, discounts, price edit setting, Rx register), the document cycle (purchase, sale, sale return, purchase return, batch trace, return list, order list text), and parties, cash book and accounts (opening balances and advances, udhaar cleared by a receipt, wallet and bank accounts in sales and purchases, expenses, income, transfers).
 
 ## Page contract
 
@@ -121,6 +121,8 @@ Services: products, stock and FEFO, ledger posting, sales, purchases, returns, p
 
 Screens: dashboard, Medicines, Stock, Expiry, the sale screen (`#/pos`), Purchases (`#/purchases`, new purchase at `#/purchases/new`), Sales (`#/sales`), Returns (`#/returns`, flow at `#/returns/new?sale=id` or `?purchase=id`), Order list (`#/demand`), Batch trace (`#/trace`) and Rx register (`#/rx`). Verified in the browser: a keyboard-only sale of three lines (loose and pack, two of them Rx) completes, and stock, ledger, Rx register rows and the dashboard update from it. Print (browser) and the WhatsApp link were checked on the success screen. The document cycle was run in the browser: purchase PUR-0001 (part paid), sale SALE-0003 on the walk-in side, sale return SRN-0001 and purchase return PRN-0001, with the supplier payable and the trial balance checked after each step. Batch trace, the Rx register print and the order list hand-off to the purchase screen were checked too.
 
-Not yet: cash book, customers and suppliers screens (the purchase screen can add a supplier), reports, backup, Bluetooth printing on hardware, camera scanning on a device, and the Supabase adapter.
+Customers and suppliers (`#/customers`, `#/suppliers`, each with a detail page for ledger, receive or pay, statement print, WhatsApp reminder, and activate or deactivate), the cash book (`#/vouchers`: Receive, Pay, Expense, Income and Transfer, with the running balance per money account), and accounts (`#/accounts`, grouped with live balances, system accounts locked, add a bank or wallet, drill down to each account at `#/accounts/<code>`).
+
+Not yet: reports, backup, Bluetooth printing on hardware, camera scanning on a device, and the Supabase adapter.
 
 Service worker and manifest: `sw.js` and `manifest.webmanifest` are in place with a precache list, but registration failed in the test browser ("unknown error when fetching the script"), so offline start has not been verified yet.

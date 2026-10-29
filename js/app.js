@@ -40,16 +40,18 @@ const ROUTES = [
   { path: '/rx', nav: 'medicines', label: 'nav.rxRegister', icon: 'rx', load: page('rxregister') },
 
   { path: '/customers', nav: 'parties', icon: 'customers', load: page('customers') },
+  { path: '/customers/:id', load: page('customer-detail') },
   { path: '/suppliers', nav: 'parties', icon: 'suppliers', load: page('suppliers') },
+  { path: '/suppliers/:id', load: page('supplier-detail') },
 
-  { path: '/cash-book', nav: 'accounts', label: 'nav.cashBook', icon: 'bank', load: page('cashbook') },
-  { path: '/ledger', nav: 'accounts', label: 'nav.ledger', icon: 'ledger', load: page('ledger') },
+  { path: '/vouchers', nav: 'accounts', label: 'nav.cashBook', icon: 'bank', load: page('vouchers') },
+  { path: '/accounts', nav: 'accounts', label: 'nav.ledger', icon: 'ledger', load: page('accounts') },
+  { path: '/accounts/:code', load: page('accounts') },
   { path: '/reports', nav: 'accounts', icon: 'reports', load: page('reports') },
 
   { path: '/backup', nav: 'admin', label: 'nav.backup', icon: 'backup', load: page('backup') },
   { path: '/settings', nav: 'admin', icon: 'settings', load: page('settings') },
 
-  { path: '/vouchers', load: page('vouchers') },
   { path: '/styleguide', guard: 'public', dev: true, chrome: true, load: page('styleguide') },
 ];
 

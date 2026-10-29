@@ -12,6 +12,7 @@ import { listWithStock } from '../services/products.js';
 import { listSuppliers, createSupplier } from '../services/parties.js';
 import { createPurchase } from '../services/purchases.js';
 import { listOpen, markOrdered } from '../services/demand.js';
+import { paymentAccounts, accountName, ACCOUNT } from '../services/ledger.js';
 import { openMedicineForm } from './_medicine-form.js';
 import { matchesFilter, matchesQuery, stockLine } from './_medicine-shared.js';
 import * as shared from './_doc-shared.js';
@@ -28,6 +29,8 @@ let supplierId = '';
 let paid = '';
 let paidTouched = false;
 let note = '';
+let payFrom = ACCOUNT.cash;
+let payAccounts = [];
 let demandRows = []; // open order rows that this purchase may close: { id, productId }
 let busy = false;
 
@@ -190,6 +193,10 @@ function shell() {
             <input name="paid" inputmode="decimal" placeholder=" " autocomplete="off">
             <label>${esc(t('purch.paid'))}</label>
           </div>
+          <label class="field">
+            <span>${esc(t('purch.paidFrom'))}</span>
+            <select name="payFrom">${payAccounts.map((a) => `<option value="${esc(a.code)}"${a.code === payFrom ? ' selected' : ''}>${esc(accountName(a))}</option>`).join('')}</select>
+          </label>
           <div class="float-field">
             <input name="note" placeholder=" " autocomplete="off">
             <label>${esc(t('purch.note'))}</label>
@@ -301,7 +308,7 @@ async function save() {
       costPerPack: paisaOf(line.cost),
       mrp: paisaOf(line.mrp),
     }));
-    const purchase = await createPurchase({ supplierId: supplierId || null, items, paid: paidOf(), note });
+    const purchase = await createPurchase({ supplierId: supplierId || null, items, paid: paidOf(), payFrom, note });
     const bought = new Set(lines.map((line) => line.productId));
     for (const row of demandRows) {
       if (row.productId && bought.has(row.productId)) await markOrdered(row.id);
@@ -377,6 +384,9 @@ function bind() {
     paid = event.currentTarget.value;
     paintTotals();
   });
+  $host.on('change', '[name="payFrom"]', (event) => {
+    payFrom = event.currentTarget.value;
+  });
   $host.on('input', '[name="note"]', (event) => {
     note = event.currentTarget.value;
   });
@@ -403,7 +413,8 @@ export async function render($root, params, query = {}) {
   busy = false;
   $root.html('<div class="doc-root pur-root"></div>');
   $host = $root.children('.doc-root');
-  [products, suppliers] = await Promise.all([listWithStock({ includeInactive: false }), listSuppliers()]);
+  [products, suppliers, payAccounts] = await Promise.all([listWithStock({ includeInactive: false }), listSuppliers(), paymentAccounts()]);
+  payFrom = ACCOUNT.cash;
   await prefill(query);
   $host.html(shell());
   bind();

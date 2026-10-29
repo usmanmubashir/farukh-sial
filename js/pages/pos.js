@@ -15,6 +15,7 @@ import { listGroups } from '../services/products.js';
 import { listCustomers, createCustomer } from '../services/parties.js';
 import { addDemand } from '../services/demand.js';
 import { getSettings } from '../services/settings.js';
+import { paymentAccounts, accountName } from '../services/ledger.js';
 import { buildReceipt, receiptHtml, receiptText } from '../services/receipt.js';
 import { printInBrowser, printToBluetooth, connectBluetoothPrinter, printerConnected, bluetoothSupported } from '../services/printing.js';
 import { whatsappLink } from '../services/demand.js';
@@ -27,7 +28,7 @@ export const title = 'nav.newSale';
 const STATUS_TONE = { in: 'ok', low: 'warn', out: 'danger' };
 const SVC_KEYS = [
   'insufficientStock', 'batchExpired', 'walkInCredit', 'overpaid', 'tenderedTooLow', 'patientDoctorRequired',
-  'discountTooLarge', 'looseNotAllowed', 'priceEditNotAllowed', 'productInactive', 'emptyCart', 'emptyTotal',
+  'discountTooLarge', 'looseNotAllowed', 'priceEditNotAllowed', 'productInactive', 'emptyCart', 'emptyTotal', 'invalidAccount',
 ];
 
 let $host = null;
@@ -37,6 +38,7 @@ let cards = [];
 let groups = [];
 let customers = [];
 let settings = {};
+let paymentOptions = []; // bank and wallet accounts that can take part of a sale
 let uidSeq = 0;
 let searchTimer = null;
 // Dialogs opened by this page. They close when the user leaves the page.
@@ -325,8 +327,10 @@ function payBody() {
       </div>
       <div class="form-grid">
         <div class="float-field"><input name="tendered" inputmode="decimal" placeholder=" " autocomplete="off"><label>${esc(t('pay.tendered'))}</label></div>
-        <div class="float-field"><input name="bank" inputmode="decimal" placeholder=" " autocomplete="off"><label>${esc(t('pay.bank'))}</label></div>
-        <div class="float-field"><input name="wallet" inputmode="decimal" placeholder=" " autocomplete="off"><label>${esc(t('pay.wallet'))}</label></div>
+        <label class="field"><span>${esc(t('pay.account'))}</span>
+          <select name="account">${paymentOptions.map((a) => `<option value="${esc(a.code)}">${esc(accountName(a))}</option>`).join('')}</select>
+        </label>
+        <div class="float-field"><input name="other" inputmode="decimal" placeholder=" " autocomplete="off"><label>${esc(t('pay.other'))}</label></div>
       </div>
       <div class="pay-summary">
         <p><span>${esc(t('pay.change'))}</span> <strong class="pay-change">${esc(rupees(0))}</strong></p>
@@ -342,12 +346,12 @@ function payBody() {
 function readPay($form) {
   const total = totalAmount();
   const tendered = paisa($form.find('[name="tendered"]').val());
-  const bank = paisa($form.find('[name="bank"]').val());
-  const wallet = paisa($form.find('[name="wallet"]').val());
-  const cashApplied = Math.max(0, Math.min(tendered, total - bank - wallet));
+  const other = paisa($form.find('[name="other"]').val());
+  const otherAccount = $form.find('[name="account"]').val() || '';
+  const cashApplied = Math.max(0, Math.min(tendered, total - other));
   const change = Math.max(0, tendered - cashApplied);
-  const remaining = Math.max(0, total - cashApplied - bank - wallet);
-  return { total, tendered, bank, wallet, cashApplied, change, remaining };
+  const remaining = Math.max(0, total - cashApplied - other);
+  return { total, tendered, other, otherAccount, cashApplied, change, remaining };
 }
 
 function paintPay($form) {
@@ -380,8 +384,7 @@ async function completeSale($form, dialog) {
   }
   const payments = [
     { method: 'cash', amount: p.cashApplied },
-    { method: 'bank', amount: p.bank },
-    { method: 'mobile', amount: p.wallet },
+    { method: paymentOptions.find((a) => a.code === p.otherAccount)?.kind === 'wallet' ? 'mobile' : 'bank', amount: p.other, accountCode: p.otherAccount },
   ].filter((x) => x.amount > 0);
   const payload = {
     customer: state.customer || null,
@@ -425,7 +428,7 @@ function openPay() {
   const $form = $body.is('form') ? $body : $body.find('form');
   let dialog = null;
   $form.find('[data-exact]').on('click', () => {
-    $form.find('[name="tendered"]').val(((readPay($form).total - paisa($form.find('[name="bank"]').val()) - paisa($form.find('[name="wallet"]').val())) / 100).toFixed(2));
+    $form.find('[name="tendered"]').val(((readPay($form).total - paisa($form.find('[name="other"]').val())) / 100).toFixed(2));
     paintPay($form);
   });
   $form.find('[data-quick]').on('click', function quick() {
@@ -876,6 +879,7 @@ export async function render($root) {
   groups = await listGroups();
   customers = await listCustomers();
   settings = await getSettings();
+  paymentOptions = await paymentAccounts({ includeCash: false });
   $host.html(shell());
   bind();
   await refreshCards();

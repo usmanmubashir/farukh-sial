@@ -14,7 +14,7 @@ import { todayISO } from '../core/dates.js';
 import { percentOf, sum } from '../core/money.js';
 import { ServiceError, missing, optionalInt, requireInt, requireOneOf } from './errors.js';
 import { allocateFEFOIn, applyMovementIn, costOfUnits } from './stock.js';
-import { postEntryIn, reversalLines, saleLines } from './ledger.js';
+import { ACCOUNT, postEntryIn, requirePaymentAccount, reversalLines, saleLines } from './ledger.js';
 import { nextDocNumber } from './numbering.js';
 import { readSettingsIn } from './settings.js';
 
@@ -96,8 +96,16 @@ export async function createSaleIn(ctx, input) {
   const total = subtotal - discount + tax;
   if (total <= 0) throw new ServiceError('emptyTotal');
 
-  const payments = (input.payments ?? [])
-    .map((p) => ({ method: requireOneOf(p.method, PAYMENT_METHODS, 'method'), amount: requireInt(p.amount, 'amount', 1) }));
+  // Each payment goes to a money account: cash goes to the drawer, anything else to the account picked (bank by default).
+  const payments = [];
+  for (const p of input.payments ?? []) {
+    const method = requireOneOf(p.method, PAYMENT_METHODS, 'method');
+    const accountCode = method === 'cash' ? ACCOUNT.cash : String(p.accountCode || ACCOUNT.bank);
+    if (method !== 'cash') await requirePaymentAccount(ctx, accountCode);
+    payments.push({ method, accountCode, amount: requireInt(p.amount, 'amount', 1) });
+  }
+  const receipts = [...payments.reduce((map, p) => map.set(p.accountCode, (map.get(p.accountCode) ?? 0) + p.amount), new Map())]
+    .map(([accountCode, amount]) => ({ accountCode, amount }));
   const paidCash = sum(payments.filter((p) => p.method === 'cash').map((p) => p.amount));
   const paidBank = sum(payments.filter((p) => p.method !== 'cash').map((p) => p.amount));
   const paid = paidCash + paidBank;
@@ -203,7 +211,7 @@ export async function createSaleIn(ctx, input) {
     docType: 'sale',
     docId: saleId,
     memo: number,
-    lines: saleLines({ paid, paidCash, paidBank, balance, net: total - tax, tax, cost, customerId }),
+    lines: saleLines({ receipts, paid, paidCash, paidBank, balance, net: total - tax, tax, cost, customerId }),
   });
   return { ...sale, items: saleItems, entryId };
 }
