@@ -1,0 +1,31 @@
+/* Print: hide the app shell so receipts and reports print cleanly. */
+
+@media print {
+  .chrome,
+  .toast-root,
+  .modal-root,
+  .loading-bar,
+  .bottom-nav,
+  .sidebar,
+  .app-header,
+  .banner,
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: #ffffff;
+    color: #000000;
+  }
+
+  .view {
+    max-width: none;
+    padding: 0;
+  }
+
+  .card {
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+  }
+}

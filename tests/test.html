@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shifa POS self-tests</title>
+  <link rel="stylesheet" href="../css/tokens.css">
+  <link rel="stylesheet" href="../css/base.css">
+  <link rel="stylesheet" href="../css/components.css">
+  <script src="../vendor/jquery.min.js"></script>
+  <style>
+    .pass { color: var(--c-ok); }
+    .fail { color: var(--c-danger); white-space: pre-wrap; }
+    #router-host { margin-block-start: var(--space-4); }
+  </style>
+</head>
+<body>
+  <main class="view">
+    <h1>Self-tests: money.js and router.js</h1>
+    <p id="summary" class="muted">Running…</p>
+    <ol id="results"></ol>
+    <div id="router-host" aria-label="router test host"></div>
+  </main>
+
+  <script type="module">
+    import * as money from '../js/core/money.js';
+    import * as i18n from '../js/core/i18n.js';
+    import * as events from '../js/core/events.js';
+    import { createRouter, parseHash, matchRoute, compilePattern } from '../js/core/router.js';
+
+    const tests = [];
+    const test = (name, fn) => tests.push({ name, fn });
+
+    function eq(actual, expected, label = 'value') {
+      const a = JSON.stringify(actual);
+      const e = JSON.stringify(expected);
+      if (a !== e) throw new Error(`${label}: expected ${e}, got ${a}`);
+    }
+
+    // Tests run in English so formatted strings are predictable.
+    i18n.init();
+
+    /* ---------- money.js ---------- */
+
+    test('parseRupees reads plain and grouped amounts into paisa', () => {
+      eq(money.parseRupees('1,234.5'), 123450, 'grouped');
+      eq(money.parseRupees('20'), 2000, 'whole');
+      eq(money.parseRupees('Rs 0.99'), 99, 'prefix');
+      eq(money.parseRupees('-12.05'), -1205, 'negative');
+      eq(money.parseRupees(' 5. '), 500, 'trailing dot');
+    });
+
+    test('parseRupees handles empty input and rejects bad input', () => {
+      eq(money.parseRupees(''), 0, 'empty');
+      eq(money.parseRupees('abc'), null, 'letters');
+      eq(money.parseRupees('1.234'), null, 'three decimals');
+      eq(money.parseRupees('1..2'), null, 'two dots');
+    });
+
+    test('parseRupees accepts Urdu and Arabic-Indic digits', () => {
+      eq(money.parseRupees('۱۲۵'), 12500, 'extended Arabic-Indic');
+      eq(money.parseRupees('١٢٥.٥'), 12550, 'Arabic-Indic with decimal');
+    });
+
+    test('format shows Rs prefix, separators and two decimals', () => {
+      eq(money.format(123450), 'Rs 1,234.50', 'basic');
+      eq(money.format(100000000), 'Rs 1,000,000.00', 'millions');
+      eq(money.format(0), 'Rs 0.00', 'zero');
+      eq(money.format(-5), '−Rs 0.05', 'negative');
+      eq(money.format(123450, { symbol: false }), '1,234.50', 'no symbol');
+    });
+
+    test('format with decimals: 0 rounds to the rupee', () => {
+      eq(money.format(1250, { decimals: 0 }), 'Rs 13', 'half up');
+      eq(money.format(1249, { decimals: 0 }), 'Rs 12', 'down');
+    });
+
+    test('roundHalfAway rounds .5 away from zero', () => {
+      eq(money.roundHalfAway(2.5), 3, 'positive half');
+      eq(money.roundHalfAway(-2.5), -3, 'negative half');
+      eq(money.roundHalfAway(2.4999), 2, 'below half');
+    });
+
+    test('percentOf applies rates with paisa-exact rounding', () => {
+      eq(money.percentOf(1005, 17), 171, 'rounds 170.85 up');
+      eq(money.percentOf(-1005, 17), -171, 'negative');
+      eq(money.percentOf(10000, 17), 1700, 'exact');
+    });
+
+    test('roundToRupee rounds totals to whole rupees', () => {
+      eq(money.roundToRupee(1249), 1200, 'down');
+      eq(money.roundToRupee(1250), 1300, 'half up');
+    });
+
+    test('sum rejects non-integer paisa', () => {
+      eq(money.sum([100, 250, -50]), 300, 'sum');
+      let threw = false;
+      try {
+        money.sum([10.5]);
+      } catch {
+        threw = true;
+      }
+      eq(threw, true, 'threw on float');
+    });
+
+    /* ---------- router.js (pure helpers) ---------- */
+
+    test('parseHash splits path and query, and maps empty to /', () => {
+      eq(parseHash('#/sales/abc?x=1&y=two'), { path: '/sales/abc', query: { x: '1', y: 'two' } }, 'full');
+      eq(parseHash('#/sales/'), { path: '/sales', query: {} }, 'trailing slash');
+      eq(parseHash(''), { path: '/', query: {} }, 'empty hash');
+      eq(parseHash('#'), { path: '/', query: {} }, 'bare #');
+    });
+
+    test('compilePattern extracts named params', () => {
+      const { names, re } = compilePattern('/products/:id/batches/:batch');
+      eq(names, ['id', 'batch'], 'names');
+      eq(re.exec('/products/7/batches/B9').slice(1), ['7', 'B9'], 'captures');
+    });
+
+    test('matchRoute picks the first match and decodes params', () => {
+      const routes = [{ path: '/a' }, { path: '/item/:id' }, { path: '/' }];
+      eq(matchRoute(routes, '/item/a%20b').params, { id: 'a b' }, 'decoded');
+      eq(matchRoute(routes, '/a').route.path, '/a', 'first match');
+      eq(matchRoute(routes, '/a/b'), null, 'no match');
+      eq(matchRoute(routes, '/').route.path, '/', 'root');
+    });
+
+    /* ---------- router.js (live navigation) ---------- */
+
+    const host = document.getElementById('router-host');
+    const pageFor = (label) => ({
+      title: 'nav.dashboard',
+      render($root, params) {
+        $root.text(`${label} ${JSON.stringify(params)}`);
+      },
+      destroy() {},
+    });
+
+    const router = createRouter({
+      view: $(host),
+      routes: [
+        { path: '/a', load: async () => pageFor('A') },
+        { path: '/item/:id', load: async () => pageFor('ITEM') },
+        { path: '/secret', load: async () => pageFor('SECRET') },
+      ],
+      notFound: async () => ({
+        title: 'errors.notFoundTitle',
+        render($root) {
+          $root.text('NOT FOUND');
+        },
+        destroy() {},
+      }),
+    });
+    router.beforeEach((to) => (to.path === '/secret' ? '/a' : undefined));
+
+    function go(hash) {
+      return new Promise((resolve) => {
+        const off = events.on('route:after', (payload) => {
+          off();
+          resolve(payload);
+        });
+        location.hash = hash;
+      });
+    }
+
+    test('router mounts the matching page with params', async () => {
+      const { to } = await go('#/item/77?tab=3');
+      eq(to.path, '/item/77', 'path');
+      eq(to.params, { id: '77' }, 'params');
+      eq(host.textContent, 'ITEM {"id":"77"}', 'rendered');
+    });
+
+    test('router guard redirects by returning a path', async () => {
+      const { to } = await go('#/secret');
+      eq(to.path, '/a', 'redirected to /a');
+      eq(host.textContent, 'A {}', 'rendered A');
+    });
+
+    test('router renders the not-found page for unknown paths', async () => {
+      await go('#/does-not-exist');
+      eq(host.textContent, 'NOT FOUND', 'not found text');
+    });
+
+    /* ---------- runner ---------- */
+
+    const list = document.getElementById('results');
+    const summary = document.getElementById('summary');
+
+    (async () => {
+      await router.start().catch(() => undefined);
+      let passed = 0;
+      for (const { name, fn } of tests) {
+        const li = document.createElement('li');
+        try {
+          await fn();
+          passed += 1;
+          li.innerHTML = `<span class="pass">PASS</span> ${name}`;
+        } catch (err) {
+          li.innerHTML = `<span class="fail">FAIL</span> ${name}\n${err.message}`;
+          console.error(name, err);
+        }
+        list.appendChild(li);
+      }
+      router.stop();
+      location.hash = '';
+      summary.textContent = `${passed} of ${tests.length} passed`;
+      window.__testResults = { passed, total: tests.length };
+    })();
+  </script>
+</body>
+</html>

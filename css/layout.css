@@ -1,0 +1,229 @@
+/* Mobile first (designed at 380px). Sidebar layout from 1024px. */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  transition: opacity var(--dur) var(--ease);
+}
+
+.app.is-booting {
+  opacity: 0;
+}
+
+/* Sidebar is an off-canvas drawer on phones and tablets. */
+.sidebar {
+  position: fixed;
+  inset-block: 0;
+  inset-inline-start: 0;
+  z-index: 40;
+  width: min(84vw, var(--sidebar-w));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  overflow-y: auto;
+  background: var(--c-surface);
+  border-inline-end: 1px solid var(--c-border);
+  transform: translateX(var(--drawer-off, -100%));
+  transition: transform var(--dur) var(--ease);
+}
+
+[dir="rtl"] {
+  --drawer-off: 100%;
+}
+
+.sidebar.is-open {
+  transform: none;
+}
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  background: var(--c-scrim);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-block: var(--space-2);
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius);
+  background: var(--c-brand);
+  color: var(--c-on-brand);
+  font-size: var(--fs-xl);
+  font-weight: 700;
+}
+
+.brand-name {
+  display: block;
+  font-weight: 700;
+}
+
+.brand-sub {
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+}
+
+.nav-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--touch);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius);
+  color: var(--c-text);
+  text-decoration: none;
+}
+
+.nav-link:hover {
+  background: var(--c-surface-muted);
+}
+
+.nav-link[aria-current="page"] {
+  background: var(--c-brand-soft);
+  color: var(--c-brand-strong);
+  font-weight: 600;
+}
+
+.main-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--header-h);
+  padding-inline: var(--space-3);
+  background: var(--c-surface);
+  border-block-end: 1px solid var(--c-border);
+}
+
+.page-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-lg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.view {
+  flex: 1;
+  width: 100%;
+  max-width: 1200px;
+  margin-inline: auto;
+  padding: var(--space-4);
+  padding-block-end: calc(var(--bottom-nav-h) + var(--space-6));
+  outline: none;
+}
+
+.is-auth .view {
+  padding-block-end: var(--space-4);
+}
+
+.bottom-nav {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 30;
+  background: var(--c-surface);
+  border-block-start: 1px solid var(--c-border);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.bottom-nav ul {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bottom-link,
+.bottom-menu {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  min-height: var(--bottom-nav-h);
+  padding: var(--space-1);
+  border: 0;
+  background: none;
+  color: var(--c-text-muted);
+  font-size: var(--fs-xs);
+  text-decoration: none;
+}
+
+.bottom-link[aria-current="page"] {
+  color: var(--c-brand-strong);
+  font-weight: 600;
+}
+
+.is-auth .chrome {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .app {
+    flex-direction: row;
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 0;
+    flex: 0 0 var(--sidebar-w);
+    width: var(--sidebar-w);
+    height: 100dvh;
+    transform: none;
+  }
+
+  .scrim,
+  .app-header .menu-btn,
+  .bottom-nav {
+    display: none;
+  }
+
+  .app-header {
+    padding-inline: var(--space-6);
+  }
+
+  .view {
+    padding: var(--space-6);
+    padding-block-end: var(--space-8);
+  }
+}

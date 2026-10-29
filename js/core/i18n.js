@@ -1,0 +1,86 @@
+// Translations and direction. Every visible string goes through t(key).
+// Switching language does not reload the page: the store notifies the UI.
+import en from '../i18n/en.js';
+import ur from '../i18n/ur.js';
+import * as store from './store.js';
+
+const DICTIONARIES = { en, ur };
+const RTL_LANGS = ['ur', 'ar', 'fa'];
+const STORAGE_KEY = 'shifa.lang';
+const warned = new Set();
+
+export const LANGUAGES = [
+  { code: 'en', label: 'English' },
+  { code: 'ur', label: 'اردو' },
+];
+
+/** t('key') or t('key', { name: 'x' }) for "{name}" placeholders. Falls back to English, then to the key. */
+export function t(key, vars) {
+  const lang = store.get('lang');
+  let text = DICTIONARIES[lang]?.[key] ?? en[key];
+  if (text === undefined) {
+    if (!warned.has(key)) {
+      warned.add(key);
+      console.warn(`[i18n] missing key "${key}"`);
+    }
+    return key;
+  }
+  if (vars) {
+    text = text.replace(/\{(\w+)\}/g, (match, name) => (name in vars ? String(vars[name]) : match));
+  }
+  return text;
+}
+
+export function isRtl(lang = store.get('lang')) {
+  return RTL_LANGS.includes(lang);
+}
+
+function applyDirection(lang) {
+  const root = document.documentElement;
+  root.lang = lang;
+  root.dir = isRtl(lang) ? 'rtl' : 'ltr';
+}
+
+/**
+ * Translates static markup:
+ *   data-i18n="key"                  sets textContent (element must not contain other markup)
+ *   data-i18n-attr="aria-label:key"  sets attributes, several separated by ";"
+ */
+export function apply(root = document) {
+  const scope = root?.jquery ? root[0] : root;
+  scope.querySelectorAll('[data-i18n]').forEach((el) => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  scope.querySelectorAll('[data-i18n-attr]').forEach((el) => {
+    el.dataset.i18nAttr.split(';').forEach((pair) => {
+      const at = pair.indexOf(':');
+      if (at < 1) return;
+      el.setAttribute(pair.slice(0, at).trim(), t(pair.slice(at + 1).trim()));
+    });
+  });
+}
+
+export function setLang(lang) {
+  if (!DICTIONARIES[lang]) throw new RangeError(`Unsupported language "${lang}"`);
+  try {
+    localStorage.setItem(STORAGE_KEY, lang);
+  } catch {
+    /* storage blocked: the choice lasts for this visit only */
+  }
+  store.set('lang', lang);
+  applyDirection(lang);
+  apply(document);
+}
+
+/** Reads the saved language (default English). Call once at boot, before rendering. */
+export function init() {
+  let saved = null;
+  try {
+    saved = localStorage.getItem(STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+  const lang = DICTIONARIES[saved] ? saved : 'en';
+  store.set('lang', lang);
+  applyDirection(lang);
+}

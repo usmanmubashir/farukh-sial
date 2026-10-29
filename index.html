@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="auto">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f766e">
+  <meta name="description" content="Shifa Pharmacy POS: offline-first pharmacy management.">
+  <title>Shifa Pharmacy POS</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f766e'/%3E%3Cpath d='M16 7v18M7 16h18' stroke='%23fff' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;700&display=swap">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <link rel="stylesheet" href="css/pages.css">
+  <link rel="stylesheet" href="css/dark.css">
+  <link rel="stylesheet" href="css/print.css" media="print">
+  <!-- jQuery: CDN first, local copy in /vendor when offline -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js" crossorigin="anonymous"></script>
+  <script>window.jQuery || document.write('<script src="vendor/jquery.min.js"><\/script>');</script>
+</head>
+<body>
+  <div id="app" class="app is-booting">
+    <a class="skip-link" href="#view" data-i18n="a11y.skipToContent">Skip to content</a>
+
+    <aside class="sidebar chrome" id="sidebar" data-i18n-attr="aria-label:a11y.mainNav">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">+</span>
+        <div>
+          <strong class="brand-name" data-i18n="app.name">Shifa Pharmacy POS</strong>
+          <div class="brand-sub" id="pharmacy-name"></div>
+        </div>
+      </div>
+      <nav aria-label="Main navigation" data-i18n-attr="aria-label:a11y.mainNav">
+        <ul class="nav-list" id="nav-list"></ul>
+      </nav>
+    </aside>
+    <div class="scrim" id="scrim" hidden></div>
+
+    <div class="main-wrap">
+      <header class="app-header chrome">
+        <button type="button" class="btn btn-ghost icon-btn menu-btn" id="menu-btn" aria-controls="sidebar" aria-expanded="false" data-i18n-attr="aria-label:a11y.openMenu">
+          <span data-icon="menu"></span>
+        </button>
+        <h1 class="page-title" id="page-title"></h1>
+        <div class="header-actions">
+          <span class="status-pill" id="net-status" role="status"></span>
+          <button type="button" class="btn btn-ghost btn-sm" id="lang-btn" data-i18n="lang.switch">اردو</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="logout-btn" data-i18n="auth.logout" hidden>Log out</button>
+        </div>
+      </header>
+
+      <div class="banner banner-warn" id="offline-banner" role="status" hidden data-i18n="net.offlineBanner"></div>
+
+      <main id="view" class="view" tabindex="-1"></main>
+    </div>
+
+    <nav class="bottom-nav chrome" id="bottom-nav" data-i18n-attr="aria-label:a11y.bottomNav">
+      <ul id="bottom-list"></ul>
+    </nav>
+
+    <div class="loading-bar" id="loading-bar" aria-hidden="true"></div>
+    <div class="toast-root" id="toast-root" aria-live="polite"></div>
+    <div class="modal-root" id="modal-root"></div>
+  </div>
+
+  <noscript>Shifa Pharmacy POS needs JavaScript to run.</noscript>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

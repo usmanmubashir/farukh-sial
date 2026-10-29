@@ -1,0 +1,57 @@
+/* Dark theme. Follows the device unless data-theme is set on <html>. */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --c-brand: #14b8a6;
+    --c-brand-strong: #5eead4;
+    --c-brand-soft: #123a37;
+    --c-on-brand: #042f2b;
+    --c-accent: #fbbf24;
+    --c-bg: #0f1719;
+    --c-surface: #172225;
+    --c-surface-muted: #1e2c2f;
+    --c-border: #2c3e42;
+    --c-text: #e6eeef;
+    --c-text-muted: #9bb2b6;
+    --c-scrim: rgb(0 0 0 / 0.6);
+    --c-danger: #f87171;
+    --c-danger-soft: #3b1b1b;
+    --c-warn: #fbbf24;
+    --c-warn-soft: #3a2e10;
+    --c-ok: #4ade80;
+    --c-ok-soft: #14321f;
+    --c-info: #60a5fa;
+    --c-info-soft: #162a40;
+    --c-focus: #93c5fd;
+    --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-2: 0 10px 30px rgb(0 0 0 / 0.5);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --c-brand: #14b8a6;
+  --c-brand-strong: #5eead4;
+  --c-brand-soft: #123a37;
+  --c-on-brand: #042f2b;
+  --c-accent: #fbbf24;
+  --c-bg: #0f1719;
+  --c-surface: #172225;
+  --c-surface-muted: #1e2c2f;
+  --c-border: #2c3e42;
+  --c-text: #e6eeef;
+  --c-text-muted: #9bb2b6;
+  --c-scrim: rgb(0 0 0 / 0.6);
+  --c-danger: #f87171;
+  --c-danger-soft: #3b1b1b;
+  --c-warn: #fbbf24;
+  --c-warn-soft: #3a2e10;
+  --c-ok: #4ade80;
+  --c-ok-soft: #14321f;
+  --c-info: #60a5fa;
+  --c-info-soft: #162a40;
+  --c-focus: #93c5fd;
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-2: 0 10px 30px rgb(0 0 0 / 0.5);
+}

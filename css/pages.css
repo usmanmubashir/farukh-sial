@@ -1,0 +1,62 @@
+/* Page-level styles: auth screens, settings and stub pages. */
+
+.auth-shell {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: var(--space-4);
+  background: linear-gradient(160deg, var(--c-brand-soft), var(--c-bg) 60%);
+}
+
+.auth-card {
+  width: min(440px, 100%);
+  padding: var(--space-6);
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-block-end: var(--space-5);
+}
+
+.auth-note {
+  margin-block-start: var(--space-4);
+}
+
+.form {
+  margin-block-start: var(--space-4);
+}
+
+.code-box {
+  display: block;
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  background: var(--c-surface-muted);
+  font-family: ui-monospace, Consolas, "Courier New", monospace;
+  word-break: break-all;
+  user-select: all;
+}
+
+.stack {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.select-inline {
+  width: auto;
+  min-width: 180px;
+}
+
+@media (min-width: 640px) {
+  .auth-card {
+    padding: var(--space-8);
+  }
+}
