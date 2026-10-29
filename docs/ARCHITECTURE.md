@@ -33,6 +33,7 @@ pages (js/pages)  ->  services (js/services)  ->  db (js/core/db.js)  ->  Indexe
 | `pos.js` | Sale screen data: `saleCards` (stock status, nearest sellable batch, rack, match score), `alternativesInStock`, `cardForBarcode`. Reads only; writes go through `sales.js` |
 | `receipt.js` | Receipt model (`buildReceipt`), WhatsApp text (`receiptText`) and print HTML (`receiptHtml`). English labels for now |
 | `printing.js` | Browser print (58/80 mm via `print.css`) and Web Bluetooth ESC/POS. Urdu is drawn on a canvas with Noto Nastaliq and sent as a raster image (`GS v 0`). Not yet tested on hardware |
+| `trace.js` | Batch trace for recalls: matching batches, the purchases and suppliers they came from, and every sale line that took units from them (net of returns) |
 | `seed-medicines.js` | Popular medicines to import (about 190 entries, no prices). Review brands and packs before relying on them |
 
 Stock views: `stock.batchRows()` gives each batch's stock, value at cost and retail, days to expiry, expiry bucket and the purchase line it came from. `returns.returnExpiredBatches()` uses it to send expired stock back to suppliers.
@@ -43,9 +44,11 @@ Screens for medicines live in `js/pages`: `products.js` (Medicines), `stock.js`,
 
 **Errors.** Services throw `ServiceError` with a `code` (for example `insufficientStock`, `walkInCredit`, `unbalanced`). The UI maps codes to `auth.err.*`-style translations, and the tests assert on codes.
 
+**Document screens (`js/pages/purchases.js`, `purchase-new.js`, `sales.js`, `returns.js`, `return-new.js`, `demand.js`, `batchtrace.js`, `rxregister.js`).** Shared helpers live in `_doc-shared.js`: the period bar (Today, Month, All, or From and To dates), status chips, summary tiles and error text. Lists come from the services and never write. CSV export is `js/core/csv.js` (UTF-8 with a BOM, money as plain rupees). Printing uses `printPage()` in `printing.js` (A4 layout in `print.css`). Dictionary keys: `doc.*`, `purch.*`, `sales.*`, `ret.*`, `order.*`, `trace.*`, `rx.*` in `js/i18n/docs-en.js` and `docs-ur.js`.
+
 **Sale screen (`js/pages/pos.js`).** Typing filters the card list. Enter adds the top card (Shift+Enter as loose units, `3*name` for a quantity). Enter presses and F4 go through one queue (`searchQueue`), so a line typed just before F4 is in the cart before the pay sheet opens. The search box is cleared at the moment Enter is pressed, so keys typed during the add start from an empty box. Each search has its own sequence number, so an older result cannot overwrite a newer one. Rx and controlled lines ask for patient and doctor on the pay sheet. Product cards are not in the Tab order (`tabindex="-1"`); ArrowDown from the search box moves into the grid. Dialogs opened by the page close when the user leaves it.
 
-**Tests.** `tests/services.test.html` runs against its own database (`shifa-services-test`), so it never touches the app's data. It has 220 assertions across products, stock/FEFO, ledger, sales, purchases, returns, demand, medicines/dashboard and the sale screen (cards, FEFO override, expired batch refusal, bank split, change, discounts, price edit setting, Rx register).
+**Tests.** `tests/services.test.html` runs against its own database (`shifa-services-test`), so it never touches the app's data. It has 246 assertions across products, stock/FEFO, ledger, sales, purchases, returns, demand, medicines/dashboard, the sale screen (cards, FEFO override, expired batch refusal, bank split, change, discounts, price edit setting, Rx register) and the document cycle (purchase, sale, sale return, purchase return, batch trace, return list, order list text).
 
 ## Page contract
 
@@ -116,8 +119,8 @@ Done: app shell, IndexedDB with migrations, router with guards and transitions, 
 
 Services: products, stock and FEFO, ledger posting, sales, purchases, returns, parties, demand list, settings and numbering, dashboard and sale-screen data, all tested in `tests/services.test.html`.
 
-Screens: dashboard, Medicines, Stock, Expiry, and the sale screen (`#/pos`). Verified in the browser: a keyboard-only sale of three lines (loose and pack, two of them Rx) completes, and stock, ledger, Rx register rows and the dashboard update from it. Print (browser) and the WhatsApp link were checked on the success screen.
+Screens: dashboard, Medicines, Stock, Expiry, the sale screen (`#/pos`), Purchases (`#/purchases`, new purchase at `#/purchases/new`), Sales (`#/sales`), Returns (`#/returns`, flow at `#/returns/new?sale=id` or `?purchase=id`), Order list (`#/demand`), Batch trace (`#/trace`) and Rx register (`#/rx`). Verified in the browser: a keyboard-only sale of three lines (loose and pack, two of them Rx) completes, and stock, ledger, Rx register rows and the dashboard update from it. Print (browser) and the WhatsApp link were checked on the success screen. The document cycle was run in the browser: purchase PUR-0001 (part paid), sale SALE-0003 on the walk-in side, sale return SRN-0001 and purchase return PRN-0001, with the supplier payable and the trial balance checked after each step. Batch trace, the Rx register print and the order list hand-off to the purchase screen were checked too.
 
-Not yet: the Rx register screen (a stub; its data is written), the Rx register and cash book screens, the sales list, purchases, customers and suppliers screens, reports, backup, Bluetooth printing on hardware, camera scanning on a device, and the Supabase adapter.
+Not yet: cash book, customers and suppliers screens (the purchase screen can add a supplier), reports, backup, Bluetooth printing on hardware, camera scanning on a device, and the Supabase adapter.
 
 Service worker and manifest: `sw.js` and `manifest.webmanifest` are in place with a precache list, but registration failed in the test browser ("unknown error when fetching the script"), so offline start has not been verified yet.

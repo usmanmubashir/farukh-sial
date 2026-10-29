@@ -28,14 +28,16 @@ const ROUTES = [
   { path: '/pos', nav: 'daily', label: 'nav.newSale', icon: 'cart', bottom: 'sell', load: page('pos') },
   { path: '/sales', nav: 'daily', icon: 'receipt', load: page('sales') },
   { path: '/purchases', nav: 'daily', icon: 'purchase', load: page('purchases') },
+  { path: '/purchases/new', load: page('purchase-new') },
   { path: '/returns', nav: 'daily', icon: 'returns', load: page('returns') },
+  { path: '/returns/new', load: page('return-new') },
 
   { path: '/products', nav: 'medicines', label: 'nav.products', icon: 'products', load: page('products') },
   { path: '/stock', nav: 'medicines', icon: 'stock', bottom: 'stock', load: page('stock') },
   { path: '/expiry', nav: 'medicines', icon: 'clock', bottom: 'expiry', load: page('expiry') },
   { path: '/demand', nav: 'medicines', label: 'nav.demand', icon: 'order', load: page('demand') },
-  { path: '/batch-trace', nav: 'medicines', label: 'nav.batchTrace', icon: 'batch', load: page('batchtrace') },
-  { path: '/rx-register', nav: 'medicines', label: 'nav.rxRegister', icon: 'rx', load: page('rxregister') },
+  { path: '/trace', nav: 'medicines', label: 'nav.batchTrace', icon: 'batch', load: page('batchtrace') },
+  { path: '/rx', nav: 'medicines', label: 'nav.rxRegister', icon: 'rx', load: page('rxregister') },
 
   { path: '/customers', nav: 'parties', icon: 'customers', load: page('customers') },
   { path: '/suppliers', nav: 'parties', icon: 'suppliers', load: page('suppliers') },

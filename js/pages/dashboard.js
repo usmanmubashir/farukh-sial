@@ -16,8 +16,8 @@ const TILES = [
   { key: 'expiry', path: '/expiry', accent: 'orange', icon: 'clock' },
   { key: 'stock', path: '/stock', accent: 'teal', icon: 'stock' },
   { key: 'orderList', path: '/demand', accent: 'purple', icon: 'order' },
-  { key: 'batchTrace', path: '/batch-trace', accent: 'cyan', icon: 'batch' },
-  { key: 'rxRegister', path: '/rx-register', accent: 'pink', icon: 'rx' },
+  { key: 'batchTrace', path: '/trace', accent: 'cyan', icon: 'batch' },
+  { key: 'rxRegister', path: '/rx', accent: 'pink', icon: 'rx' },
   { key: 'customers', path: '/customers', accent: 'amber', icon: 'customers' },
 ];
 
@@ -78,7 +78,7 @@ function hero(d) {
       </div>
       <div class="hero-actions">
         <a class="btn hero-btn hero-btn--solid" href="#/pos">${esc(i18n.t('hero.newSale'))}</a>
-        <a class="btn hero-btn" href="#/purchases">${esc(i18n.t('hero.newPurchase'))}</a>
+        <a class="btn hero-btn" href="#/purchases/new">${esc(i18n.t('hero.newPurchase'))}</a>
       </div>
     </section>`;
 }

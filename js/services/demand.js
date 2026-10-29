@@ -5,7 +5,7 @@
 // One open row per product (or per unmatched name). Adding again raises the quantity; it never duplicates.
 import * as db from '../core/db.js';
 import { t } from '../core/i18n.js';
-import { todayISO } from '../core/dates.js';
+import { formatDate, todayISO } from '../core/dates.js';
 import { ServiceError, missing, requireInt, requireOneOf, requireText } from './errors.js';
 import { lowStock } from './stock.js';
 import { keyOf } from './products.js';
@@ -93,6 +93,41 @@ export function removeDemand(id) {
     if (!row) throw missing('demand', id);
     ctx.remove('demandList', id);
   });
+}
+
+/** Changes an open order line: quantity, preferred supplier (or none) and note. */
+export function updateDemand(id, patch) {
+  return db.transaction(async (ctx) => {
+    const row = await ctx.get('demandList', id);
+    if (!row) throw missing('demand', id);
+    const next = { ...row };
+    if (patch.packs !== undefined) next.packs = requireInt(patch.packs, 'packs', 1);
+    if (patch.supplierId !== undefined) {
+      if (patch.supplierId && !(await ctx.get('suppliers', patch.supplierId))) throw missing('supplier', patch.supplierId);
+      next.supplierId = patch.supplierId || null;
+    }
+    if (patch.note !== undefined) next.note = String(patch.note ?? '').trim();
+    return ctx.put('demandList', next);
+  });
+}
+
+/**
+ * Order text for one supplier, ready for WhatsApp. rows are open demand rows (already filtered to that supplier).
+ * Lines carry the quantity in packs and the note, if any.
+ */
+export function formatSupplierOrder({ pharmacyName = '', supplierName = '', date = todayISO(), rows = [] }) {
+  const greeting = supplierName ? [t('order.wa.greeting', { supplier: supplierName })] : [];
+  const lines = rows.map((row, i) =>
+    t('order.wa.line', { index: i + 1, name: row.name, packs: row.packs, note: row.note ? ` (${row.note})` : '' }),
+  );
+  return [
+    ...greeting,
+    t('order.wa.header', { pharmacy: pharmacyName, date: formatDate(date) }),
+    '',
+    ...lines,
+    '',
+    t('order.wa.footer'),
+  ].join('\n');
 }
 
 /** Plain-text order list for WhatsApp. */

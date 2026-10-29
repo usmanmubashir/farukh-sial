@@ -35,6 +35,7 @@
     import * as parties from '../js/services/parties.js';
     import * as settings from '../js/services/settings.js';
     import * as pos from '../js/services/pos.js';
+    import * as trace from '../js/services/trace.js';
 
     db.useDatabase('shifa-services-test');
 
@@ -685,6 +686,69 @@
       eq('whole book balances after sale screen sales', (await ledger.trialBalance()).balanced, true);
     }
 
+    /* ---------- 10. documents: full cycle, trace, return list, order list ---------- */
+
+    async function documentsGroup() {
+      const pan = await products.createProduct({
+        name: 'Panadol 500mg', generic: 'Paracetamol', barcode: '890100', code: 'PAN500', soldAs: 'strip', unitsPerPack: 10,
+        looseSelling: true, looseUnitPrice: 450, costPerPack: 2000, salePricePerPack: 4000, mrpPerPack: 4000,
+      });
+      const sup = await parties.createSupplier({ name: 'Sami Distributors' });
+      const cust = await parties.createCustomer({ name: 'Ali Khan', phone: '0300' });
+
+      // Purchase: 3 packs for 6000, 1000 paid now, the rest owed to the supplier.
+      const bought = await purchases.createPurchase({
+        supplierId: sup.id, items: [{ productId: pan.id, batchNo: 'B-1', expiry: monthYear(12), packs: 3, costPerPack: 2000, mrp: 4000 }], paid: 1000,
+      });
+      eq('purchase total', bought.total, 6000);
+      eq('purchase leaves the rest payable to the supplier', await ledger.partyBalance(sup.id, '2000'), -5000);
+
+      // Sale of 2 packs on credit to a customer, then 10 units back, credited to the customer's account.
+      const sale = await sales.createSale({ customer: cust.id, items: [{ productId: pan.id, packs: 2 }], payments: [] });
+      const saleItem = (await sales.getSaleWithItems(sale.id)).items[0];
+      const back = await returns.createSaleReturn({ saleId: sale.id, items: [{ saleItemId: saleItem.id, units: 10 }], refund: 0, reason: 'wrong strip' });
+      eq('sale return value is half the sale', back.gross, 4000);
+      eq('sale return credits the customer account', await ledger.partyBalance(cust.id, '1100'), 4000);
+      eq('sale return puts the units back in the batch', await batchUnits(pan.id, 'B-1'), 20);
+      eq('sale is marked partially returned', (await sales.getSale(sale.id)).status, 'partially_returned');
+
+      // Purchase return: one pack goes back to the supplier, credited against the payable.
+      const purchaseItem = (await purchases.getPurchaseWithItems(bought.id)).items[0];
+      const sent = await returns.createPurchaseReturn({ purchaseId: bought.id, items: [{ purchaseItemId: purchaseItem.id, packs: 1 }], refund: 0 });
+      eq('purchase return value', sent.gross, 2000);
+      eq('purchase return reduces the supplier payable', await ledger.partyBalance(sup.id, '2000'), -3000);
+      eq('purchase return takes the pack out of the batch', await batchUnits(pan.id, 'B-1'), 10);
+      eq('return list by type: sale', (await returns.listReturns({ type: 'sale' })).length, 1);
+      eq('return list by type: purchase', (await returns.listReturns({ type: 'purchase' })).length, 1);
+      eq('return detail has its lines', (await returns.getReturnWithItems(back.id)).items.length, 1);
+      await fails('cannot return more than was sold', () => returns.createSaleReturn({ saleId: sale.id, items: [{ saleItemId: saleItem.id, units: 50 }], refund: 0 }), 'returnExceedsSold');
+
+      // Walk-in sale of the rest, then the trace: who got this batch, and from which supplier.
+      await sales.createSale({ items: [{ productId: pan.id, packs: 1 }], payments: [{ method: 'cash', amount: 4000 }] });
+      const [batch] = await trace.traceBatches('B-1');
+      eq('trace finds the batch by number', batch?.batchNo, 'B-1');
+      eq('trace finds the same batch by medicine name', (await trace.traceBatches('panadol'))[0]?.batchNo, 'B-1');
+      eq('trace lists the customer with net units', batch.sales.filter((s) => s.customer === 'Ali Khan').map((s) => [s.phone, s.net]), [['0300', 10]]);
+      ok('trace lists the walk-in sale with no customer', batch.sales.some((s) => s.customer === ''));
+      eq('trace shows the supplier of the purchase', batch.purchases.map((p) => p.supplier), ['Sami Distributors']);
+      eq('trace shows what is left on the shelf', [batch.packs, batch.units], [0, 0]);
+      eq('trace for an unknown batch is empty', await trace.traceBatches('NOPE-999'), []);
+
+      // Order list: quantities and supplier can change, and the supplier text is formatted for WhatsApp.
+      const line = await demand.addDemand({ productId: pan.id, packs: 2, reason: 'low_stock' });
+      const changed = await demand.updateDemand(line.id, { supplierId: sup.id, packs: 5, note: 'strip only' });
+      eq('order line takes the new quantity', changed.packs, 5);
+      eq('order line takes the preferred supplier', changed.supplierId, sup.id);
+      await fails('order line rejects an unknown supplier', () => demand.updateDemand(line.id, { supplierId: 'nobody' }), 'notFound');
+      const rows = await demand.listOpen();
+      const withName = demand.formatSupplierOrder({ pharmacyName: 'Test', supplierName: 'Sami', rows });
+      const withoutName = demand.formatSupplierOrder({ pharmacyName: 'Test', supplierName: '', rows });
+      ok('order text names the medicine and quantity', withName.includes('Panadol 500mg') && withName.includes('5'));
+      eq('order text has a greeting only when there is a supplier', withName.split('\n').length, withoutName.split('\n').length + 1);
+
+      eq('whole book balances after the document cycle', (await ledger.trialBalance()).balanced, true);
+    }
+
     /* ---------- runner ---------- */
 
     const groups = [
@@ -697,6 +761,7 @@
       ['demand list', demandGroup],
       ['medicines, expiry and dashboard', medicinesGroup],
       ['sale screen', posGroup],
+      ['documents and trace', documentsGroup],
     ];
 
     const list = document.getElementById('results');

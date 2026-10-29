@@ -4,11 +4,13 @@ import enBase from '../i18n/en.js';
 import urBase from '../i18n/ur.js';
 import enScreens from '../i18n/screens-en.js';
 import urScreens from '../i18n/screens-ur.js';
+import enDocs from '../i18n/docs-en.js';
+import urDocs from '../i18n/docs-ur.js';
 import * as store from './store.js';
 
 // Screen strings override the base dictionaries with the same key.
-const en = { ...enBase, ...enScreens };
-const ur = { ...urBase, ...urScreens };
+const en = { ...enBase, ...enScreens, ...enDocs };
+const ur = { ...urBase, ...urScreens, ...urDocs };
 const DICTIONARIES = { en, ur };
 const RTL_LANGS = ['ur', 'ar', 'fa'];
 const STORAGE_KEY = 'shifa.lang';

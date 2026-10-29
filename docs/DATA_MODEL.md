@@ -40,7 +40,7 @@ Every write goes through `db.transaction()`, which also queues synced rows in `o
 | accounts | id | code (unique) | yes | Chart of accounts. System rows have `system: true` and fixed ids (`acc-1000`...). Bank (`1010`) is a system account; card, bank transfer and wallet receipts post there, cash posts to `1000`. |
 | ledgerEntries | id | accountDate[accountId, date], date, doc[docType, docId] | yes | One row per line: `entryId`, `accountCode`, `partyId`, `debit`, `credit`, `docType`, `docId`, `memo` |
 | vouchers | id | date, number (unique) | yes | `type`: receipt (RCV), payment (PAY), transfer (TRF), adjustment (ADJ) |
-| demandList | id | productId, status | yes | `name`, `nameKey`, `packs`, `reason` (low_stock, not_found, manual), `status` (open, ordered), `note` |
+| demandList | id | productId, status | yes | `name`, `nameKey`, `packs`, `reason` (low_stock, not_found, manual), `status` (open, ordered), `note`, `supplierId` (preferred supplier, optional; set from the order list) |
 | settings | key | — | no | `{ key, value }`. Keys: `pharmacyName`, `deviceId`, `session`, `business` (business rules), `heldCarts` (parked carts). Business rules that the sale screen reads: `rxRequiresPatientDoctor` (true), `voidSameDayOnly` (true), `allowPriceEdit` (true), `receiptWidth` (80 or 58 mm), `receiptShowBatch` (false), `receiptShowDirections` (true), `devicePrefix`, `productGroups` |
 | counters | key | — | no | `{ key, value }`. Last issued number per sequence |
 | syncState | key | — | no | Sync cursor and adapter state |

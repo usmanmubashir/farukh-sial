@@ -15,8 +15,8 @@ let characteristic = null;
 
 export const bluetoothSupported = () => typeof navigator !== 'undefined' && 'bluetooth' in navigator;
 
-/** Prints the receipt through the browser's print dialog. */
-export function printInBrowser(model) {
+/** Puts html in the print area and opens the print dialog. The area is emptied again after printing. */
+function printArea(html, attributes) {
   let area = document.getElementById('print-area');
   if (!area) {
     area = document.createElement('div');
@@ -24,14 +24,26 @@ export function printInBrowser(model) {
     area.style.display = 'none'; // shown only by the print stylesheet
     document.body.appendChild(area);
   }
-  area.innerHTML = receiptHtml(model);
-  area.dataset.width = String(model.width);
+  area.innerHTML = html;
+  delete area.dataset.width;
+  delete area.dataset.page;
+  Object.assign(area.dataset, attributes);
   const done = () => {
     area.innerHTML = '';
     window.removeEventListener('afterprint', done);
   };
   window.addEventListener('afterprint', done);
   window.print();
+}
+
+/** Prints the receipt through the browser's print dialog. */
+export function printInBrowser(model) {
+  printArea(receiptHtml(model), { width: String(model.width) });
+}
+
+/** Prints a page document (registers, reports). `size` is 'a4' (the default) and sets the layout in print.css. */
+export function printPage(html, { size = 'a4' } = {}) {
+  printArea(html, { page: size });
 }
 
 /** Asks for a printer, then keeps the writable characteristic for later prints. */

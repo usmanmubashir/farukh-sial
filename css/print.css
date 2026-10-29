@@ -65,4 +65,55 @@
   @page {
     margin: 2mm;
   }
+
+  /* Page documents (Rx register and the like) use the full sheet. */
+  #print-area[data-page="a4"] {
+    width: auto;
+    inset: 0;
+    padding: 0;
+  }
+
+  #print-area .doc {
+    color: #000;
+    font-size: 9pt;
+  }
+
+  #print-area .doc h1 {
+    font-size: 14pt;
+    margin: 0 0 2mm;
+  }
+
+  #print-area .doc table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  #print-area .doc th,
+  #print-area .doc td {
+    border: 0.3pt solid #000;
+    padding: 1mm 1.5mm;
+    text-align: start;
+    vertical-align: top;
+  }
+
+  #print-area .doc thead {
+    display: table-header-group; /* repeat the header on every page */
+  }
+
+  #print-area .doc tr {
+    break-inside: avoid;
+  }
+
+  #print-area .doc .sign {
+    display: flex;
+    justify-content: space-between;
+    margin-block-start: 12mm;
+  }
+
+  #print-area .doc .sign span {
+    border-block-start: 0.3pt solid #000;
+    padding-block-start: 1mm;
+    min-width: 45mm;
+    text-align: center;
+  }
 }

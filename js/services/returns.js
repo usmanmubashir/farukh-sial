@@ -233,6 +233,21 @@ export function createPurchaseReturn(input) {
 
 export const getReturn = (id) => db.get('returns', id);
 
+export async function getReturnWithItems(id) {
+  const doc = await db.get('returns', id);
+  if (!doc) throw missing('return', id);
+  const items = await db.getAll('returnItems', { index: 'returnId', query: id });
+  return { ...doc, items };
+}
+
+/** Returns in a date range, newest first. type: '' (both), 'sale' or 'purchase'. */
+export async function listReturns({ from = '', to = '￿', type = '' } = {}) {
+  const rows = await db.getAll('returns', { index: 'date', query: IDBKeyRange.bound(from, to) });
+  return rows
+    .filter((row) => !type || row.type === type)
+    .sort((a, b) => b.date.localeCompare(a.date) || b.number.localeCompare(a.number));
+}
+
 /**
  * Sends expired batches back to their suppliers, one purchase return per purchase.
  * Batches with no purchase line (opening stock) cannot be returned and are counted. Loose units that do
