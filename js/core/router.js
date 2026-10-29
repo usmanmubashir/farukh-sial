@@ -108,7 +108,8 @@ export function createRouter({ routes, notFound, view }) {
     emit('route:loading', false);
     if (mine !== token) return;
 
-    await anim.leave(view);
+    // Nothing to fade out on first paint, so skip the wait.
+    if (view.children().length) await anim.leave(view);
     if (mine !== token) return;
 
     if (current?.module?.destroy) {
@@ -132,6 +133,7 @@ export function createRouter({ routes, notFound, view }) {
       return;
     }
 
+    anim.prepare(view);
     current = { to, module };
     if (module.title) document.title = `${t(module.title)} · ${t('app.name')}`;
     for (const hook of afterHooks) hook(to, from);

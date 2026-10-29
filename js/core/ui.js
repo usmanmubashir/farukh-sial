@@ -57,10 +57,47 @@ export function toast(message, { type = 'info', timeout = 3500 } = {}) {
     .on('click', remove);
   $('#toast-root').append($item);
 
+  let timer = timeout > 0 ? setTimeout(remove, timeout) : null;
   function remove() {
+    clearTimeout(timer);
     $item.remove();
   }
-  if (timeout > 0) setTimeout(remove, timeout);
+
+  // Swipe sideways to dismiss. Short swipes spring back.
+  const item = $item[0];
+  let startX = null;
+  item.addEventListener('pointerdown', (event) => {
+    if (event.target.closest('button')) return;
+    startX = event.clientX;
+    clearTimeout(timer);
+    item.setPointerCapture?.(event.pointerId);
+    item.classList.add('is-dragging');
+  });
+  item.addEventListener('pointermove', (event) => {
+    if (startX === null) return;
+    item.style.transform = `translateX(${event.clientX - startX}px)`;
+    item.style.opacity = String(Math.max(0.2, 1 - Math.abs(event.clientX - startX) / 220));
+  });
+  const release = (event) => {
+    if (startX === null) return;
+    const dx = event.clientX - startX;
+    startX = null;
+    item.classList.remove('is-dragging');
+    if (Math.abs(dx) > 90) {
+      const dir = dx > 0 ? 1 : -1;
+      item.animate([{ transform: item.style.transform, opacity: item.style.opacity }, { transform: `translateX(${dir * 420}px)`, opacity: 0 }], {
+        duration: 200,
+        easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+      }).onfinish = remove;
+    } else {
+      item.animate([{ transform: item.style.transform }, { transform: 'none' }], { duration: 320, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)' });
+      item.style.transform = '';
+      item.style.opacity = '';
+      if (timeout > 0) timer = setTimeout(remove, 1500);
+    }
+  };
+  item.addEventListener('pointerup', release);
+  item.addEventListener('pointercancel', release);
   return remove;
 }
 
@@ -91,6 +128,7 @@ export function openModal({ title, body, actions = [], onClose } = {}) {
   const $modal = $(`
     <div class="modal-backdrop">
       <div class="modal card" role="dialog" aria-modal="true" aria-labelledby="modal-title-${id}" tabindex="-1">
+        <span class="sheet-handle" aria-hidden="true"></span>
         <header class="modal-head">
           <h2 class="modal-title" id="modal-title-${id}"></h2>
           <button type="button" class="btn btn-ghost icon-btn modal-x"></button>
@@ -146,7 +184,44 @@ export function openModal({ title, body, actions = [], onClose } = {}) {
 
   $('#modal-root').append($modal);
   $dialog[0].focus();
+  attachSheetDrag($dialog[0], close);
   return { close };
+}
+
+/**
+ * On phones the dialog is a bottom sheet. Dragging its handle down past 120px closes it,
+ * and a short drag springs back. Desktop dialogs are not affected.
+ */
+function attachSheetDrag(sheet, close) {
+  const handle = sheet.querySelector('.sheet-handle') ?? sheet.querySelector('.modal-head');
+  if (!handle) return;
+  let startY = null;
+  handle.addEventListener('pointerdown', (event) => {
+    if (!globalThis.matchMedia?.('(max-width: 639px)').matches) return;
+    startY = event.clientY;
+    handle.setPointerCapture?.(event.pointerId);
+  });
+  handle.addEventListener('pointermove', (event) => {
+    if (startY === null) return;
+    sheet.style.transform = `translateY(${Math.max(0, event.clientY - startY)}px)`;
+  });
+  const release = (event) => {
+    if (startY === null) return;
+    const dy = Math.max(0, event.clientY - startY);
+    startY = null;
+    if (dy > 120) {
+      sheet.style.transform = '';
+      close();
+      return;
+    }
+    sheet.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], {
+      duration: 320,
+      easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+    });
+    sheet.style.transform = '';
+  };
+  handle.addEventListener('pointerup', release);
+  handle.addEventListener('pointercancel', release);
 }
 
 /** Yes/no dialog. Resolves true only when the user confirms. */
@@ -195,4 +270,100 @@ export function setTheme(mode) {
 
 export function initTheme() {
   setTheme(getTheme());
+}
+
+/** Shimmering placeholder lines for an async region. */
+export function skeleton(lines = 3) {
+  const rows = Array.from({ length: lines }, (_, i) => `<div class="skeleton skeleton-line" style="width:${100 - i * 12}%"></div>`);
+  return `<div class="stack" aria-hidden="true">${rows.join('')}</div>`;
+}
+
+/** Empty state with the dashed morphing blob. Returns markup. */
+export function emptyState({ iconName = 'products', title, text = '', actionLabel = '', actionHref = '#/dashboard' } = {}) {
+  return `
+    <section class="empty-state">
+      <div class="empty-blob">${icon(iconName)}</div>
+      <h2>${esc(title)}</h2>
+      ${text ? `<p class="muted">${esc(text)}</p>` : ''}
+      ${actionLabel ? `<a class="btn btn-primary" href="${esc(actionHref)}">${esc(actionLabel)}</a>` : ''}
+    </section>`;
+}
+
+/**
+ * Command palette (Ctrl+K). source(query) returns [{ label, hint, run }] and may be async.
+ * Arrow keys move, Enter runs the highlighted item, Escape or a backdrop click closes it.
+ */
+export function openPalette({ source, placeholder = '' } = {}) {
+  const previous = document.activeElement;
+  const $back = $(`
+    <div class="palette-backdrop">
+      <div class="palette glass" role="dialog" aria-modal="true" aria-label="${esc(placeholder)}">
+        <input class="palette-input" type="search" role="combobox" aria-expanded="true" aria-controls="palette-list" autocomplete="off">
+        <ul class="palette-list" id="palette-list" role="listbox"></ul>
+      </div>
+    </div>`);
+  const $input = $back.find('input');
+  const $list = $back.find('.palette-list');
+  let items = [];
+  let active = 0;
+  let seq = 0;
+
+  function highlight() {
+    $list.children('.palette-item').each((i, el) => el.setAttribute('aria-selected', String(i === active)));
+    $list.children('.palette-item').eq(active)[0]?.scrollIntoView?.({ block: 'nearest' });
+  }
+
+  async function render() {
+    const mine = (seq += 1);
+    const found = (await source($input.val() ?? '')) ?? [];
+    if (mine !== seq) return;
+    items = found;
+    active = 0;
+    $list.empty();
+    if (!items.length) {
+      $list.append(`<li class="palette-item muted">${esc(t('common.empty'))}</li>`);
+      return;
+    }
+    items.forEach((item, i) => {
+      $('<li class="palette-item" role="option"></li>')
+        .append($('<span></span>').text(item.label), $('<span class="muted small"></span>').text(item.hint ?? ''))
+        .on('click', () => choose(i))
+        .appendTo($list);
+    });
+    highlight();
+  }
+
+  function close() {
+    $back.remove();
+    previous?.focus?.();
+  }
+
+  function choose(index) {
+    const item = items[index];
+    if (!item) return;
+    close();
+    item.run?.();
+  }
+
+  $input.attr('placeholder', placeholder).on('input', render);
+  $input.on('keydown', (event) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (items.length) active = (active + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+      highlight();
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      choose(active);
+    } else if (event.key === 'Escape') {
+      close();
+    }
+  });
+  $back.on('click', (event) => {
+    if (event.target === $back[0]) close();
+  });
+
+  $('#modal-root').append($back);
+  $input[0].focus();
+  render();
+  return { close };
 }

@@ -165,4 +165,7 @@ export default {
   'modal.logoutTitle': 'لاگ آؤٹ کریں؟',
   'modal.logoutMessage': 'ایپ دوبارہ کھولنے کے لیے اونر کا پاس ورڈ درکار ہوگا۔',
   'toast.loggedOut': 'لاگ آؤٹ ہو گیا۔',
+
+  'palette.placeholder': 'صفحہ یا دوا تلاش کریں…',
+  'styleguide.title': 'اسٹائل گائیڈ',
 };

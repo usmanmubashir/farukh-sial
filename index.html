@@ -7,20 +7,39 @@
   <meta name="description" content="Shifa Pharmacy POS: offline-first pharmacy management.">
   <title>Shifa Pharmacy POS</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f766e'/%3E%3Cpath d='M16 7v18M7 16h18' stroke='%23fff' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;700&display=swap">
+  <link rel="preload" href="fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/layout.css">
   <link rel="stylesheet" href="css/components.css">
-  <link rel="stylesheet" href="css/animations.css">
-  <link rel="stylesheet" href="css/pages.css">
   <link rel="stylesheet" href="css/dark.css">
+  <!-- Not needed for the first paint: loaded without blocking. The noscript copy keeps no-JS pages styled. -->
+  <link rel="stylesheet" href="css/animations.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="css/pages.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="css/animations.css"><link rel="stylesheet" href="css/pages.css"></noscript>
   <link rel="stylesheet" href="css/print.css" media="print">
-  <!-- jQuery: CDN first, local copy in /vendor when offline -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js" crossorigin="anonymous"></script>
-  <script>window.jQuery || document.write('<script src="vendor/jquery.min.js"><\/script>');</script>
+  <link rel="preload" href="fonts/inter-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <!-- The boot module graph is fetched in parallel instead of one import at a time. -->
+  <link rel="modulepreload" href="js/app.js">
+  <link rel="modulepreload" href="js/core/db.js">
+  <link rel="modulepreload" href="js/core/events.js">
+  <link rel="modulepreload" href="js/core/store.js">
+  <link rel="modulepreload" href="js/core/i18n.js">
+  <link rel="modulepreload" href="js/i18n/en.js">
+  <link rel="modulepreload" href="js/i18n/ur.js">
+  <link rel="modulepreload" href="js/core/money.js">
+  <link rel="modulepreload" href="js/core/dates.js">
+  <link rel="modulepreload" href="js/core/router.js">
+  <link rel="modulepreload" href="js/core/anim.js">
+  <link rel="modulepreload" href="js/core/auth.js">
+  <link rel="modulepreload" href="js/core/sync.js">
+  <link rel="modulepreload" href="js/core/ui.js">
+  <link rel="modulepreload" href="js/services/ledger.js">
+  <link rel="modulepreload" href="js/services/numbering.js">
+  <link rel="modulepreload" href="js/services/settings.js">
+  <link rel="modulepreload" href="js/services/errors.js">
+  <link rel="modulepreload" href="js/pages/_stub.js">
+  <link rel="modulepreload" href="js/pages/dashboard.js">
 </head>
 <body>
   <div id="app" class="app is-booting">
@@ -68,6 +87,9 @@
   </div>
 
   <noscript>Shifa Pharmacy POS needs JavaScript to run.</noscript>
+  <!-- jQuery 3.7.1 is served from /vendor: same origin, deferred, works offline. (The cdnjs copy is not used
+       because its extra connection and render-blocking fallback cost first paint. See docs/MOTION.md.) -->
+  <script defer src="vendor/jquery.min.js"></script>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

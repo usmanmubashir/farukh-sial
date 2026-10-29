@@ -1,69 +1,212 @@
-/* Design tokens. Light values live here; dark overrides are in dark.css. */
+/* Design tokens. Light values live here. Dark values are in dark.css, and both use the same names.
+   Motion tokens are described in docs/MOTION.md. */
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/inter-latin-400-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../fonts/inter-latin-500-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../fonts/inter-latin-600-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../fonts/inter-latin-700-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Noto Nastaliq Urdu";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/noto-nastaliq-urdu-400.woff2") format("woff2");
+}
+
 :root {
   color-scheme: light;
 
+  /* Brand: emerald to teal */
+  --emerald-600: #047857;
+  --teal-700: #0f766e;
   --c-brand: #0f766e;
   --c-brand-strong: #0b5f59;
-  --c-brand-soft: #d6f2ee;
+  --c-brand-start: #047857;
+  --c-brand-end: #0f766e;
+  --c-brand-soft: #d9f5ef;
+  --c-brand-ink: #064e46;
   --c-on-brand: #ffffff;
+  --grad-brand: linear-gradient(135deg, var(--c-brand-start) 0%, var(--c-brand-end) 100%);
+  --shadow-glow-brand: 0 10px 28px -8px rgb(15 118 110 / 0.55);
   --c-accent: #b45309;
 
-  --c-bg: #f4f7f7;
-  --c-surface: #ffffff;
-  --c-surface-muted: #eef3f3;
-  --c-border: #d5dfe0;
-  --c-text: #17262a;
-  --c-text-muted: #51676c;
-  --c-scrim: rgb(15 23 26 / 0.45);
+  /* Neutrals */
+  --n-0: #ffffff;
+  --n-50: #f7faf9;
+  --n-100: #eef3f3;
+  --n-200: #dfe7e8;
+  --n-300: #c8d3d5;
+  --n-400: #9aa9ac;
+  --n-500: #6e8184;
+  --n-600: #51676c;
+  --n-700: #3b4f53;
+  --n-800: #24373b;
+  --n-900: #14242a;
 
-  --c-danger: #b42318;
-  --c-danger-soft: #fdecea;
-  --c-warn: #8a5a00;
-  --c-warn-soft: #fff4d6;
+  --c-bg: #f3f7f6;
+  --c-surface: #ffffff;
+  --c-surface-muted: var(--n-100);
+  --c-border: var(--n-200);
+  --c-border-strong: var(--n-300);
+  --c-text: var(--n-900);
+  --c-text-muted: var(--n-600);
+  --c-scrim: rgb(14 26 29 / 0.42);
+  --c-focus-ring: rgb(15 118 110 / 0.35);
+
+  /* Glass surfaces: blur where supported, solid otherwise (see base.css) */
+  --glass-bg: rgb(255 255 255 / 0.72);
+  --glass-border: rgb(255 255 255 / 0.6);
+  --glass-blur: blur(18px) saturate(160%);
+
+  /* Semantic */
   --c-ok: #137a3b;
   --c-ok-soft: #dcf5e4;
+  --c-warn: #8a5a00;
+  --c-warn-soft: #fff1cc;
+  --c-danger: #b42318;
+  --c-danger-soft: #fde8e6;
   --c-info: #0b5cad;
-  --c-info-soft: #e3f0fd;
-  --c-focus: #1d4ed8;
+  --c-info-soft: #e0eefc;
+  --c-focus: #0f766e;
 
-  --space-1: 0.25rem;
-  --space-2: 0.5rem;
-  --space-3: 0.75rem;
-  --space-4: 1rem;
-  --space-5: 1.25rem;
-  --space-6: 1.5rem;
-  --space-8: 2rem;
+  /* Feature accents: base colour, gradient, inner glow (soft tint used behind icons) */
+  --accent-green: #16a34a;
+  --accent-green-grad: linear-gradient(135deg, #4ade80, #15803d);
+  --accent-green-glow: rgb(22 163 74 / 0.35);
+  --accent-green-soft: #dcfce7;
+  --accent-blue: #2563eb;
+  --accent-blue-grad: linear-gradient(135deg, #60a5fa, #1d4ed8);
+  --accent-blue-glow: rgb(37 99 235 / 0.35);
+  --accent-blue-soft: #dbeafe;
+  --accent-orange: #ea580c;
+  --accent-orange-grad: linear-gradient(135deg, #fb923c, #c2410c);
+  --accent-orange-glow: rgb(234 88 12 / 0.35);
+  --accent-orange-soft: #ffedd5;
+  --accent-teal: #0d9488;
+  --accent-teal-grad: linear-gradient(135deg, #5eead4, #0f766e);
+  --accent-teal-glow: rgb(13 148 136 / 0.35);
+  --accent-teal-soft: #ccfbf1;
+  --accent-purple: #7c3aed;
+  --accent-purple-grad: linear-gradient(135deg, #a78bfa, #6d28d9);
+  --accent-purple-glow: rgb(124 58 237 / 0.35);
+  --accent-purple-soft: #ede9fe;
+  --accent-cyan: #0891b2;
+  --accent-cyan-grad: linear-gradient(135deg, #67e8f9, #0e7490);
+  --accent-cyan-glow: rgb(8 145 178 / 0.35);
+  --accent-cyan-soft: #cffafe;
+  --accent-pink: #db2777;
+  --accent-pink-grad: linear-gradient(135deg, #f9a8d4, #be185d);
+  --accent-pink-glow: rgb(219 39 119 / 0.35);
+  --accent-pink-soft: #fce7f3;
+  --accent-amber: #d97706;
+  --accent-amber-grad: linear-gradient(135deg, #fcd34d, #b45309);
+  --accent-amber-glow: rgb(217 119 6 / 0.35);
+  --accent-amber-soft: #fef3c7;
 
-  --radius-sm: 6px;
-  --radius: 10px;
+  /* Radius */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-md: 12px;
   --radius-lg: 16px;
-  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.06);
-  --shadow-2: 0 10px 30px rgb(0 0 0 / 0.14);
+  --radius-xl: 24px;
+  --radius-pill: 999px;
 
-  --font-latin: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-urdu: "Noto Nastaliq Urdu", "Jameel Noori Nastaleeq", "Urdu Typesetting", serif;
+  /* Shadows: layered, with a colour in the outer layer */
+  --shadow-1: 0 1px 1px rgb(14 26 29 / 0.04), 0 1px 2px rgb(14 26 29 / 0.06);
+  --shadow-2: 0 1px 2px rgb(14 26 29 / 0.05), 0 6px 16px -4px rgb(14 26 29 / 0.10), 0 16px 32px -12px rgb(14 26 29 / 0.14);
+  --shadow-3: 0 2px 4px rgb(14 26 29 / 0.05), 0 14px 28px -8px rgb(14 26 29 / 0.16), 0 32px 64px -24px rgb(14 26 29 / 0.26);
+
+  /* Spacing: 4px grid */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Fluid type scale */
+  --font-latin: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Latin inside Urdu text (numbers, product codes) falls back to Inter, not to a serif. */
+  --font-urdu: "Noto Nastaliq Urdu", "Jameel Noori Nastaleeq", "Urdu Typesetting", "Inter", system-ui, sans-serif;
   --font-body: var(--font-latin);
-  --fs-xs: 0.75rem;
-  --fs-sm: 0.875rem;
-  --fs-base: 1rem;
-  --fs-lg: 1.125rem;
-  --fs-xl: 1.3rem;
-  --fs-2xl: 1.6rem;
+  --font-num: var(--font-latin);
+  --fs-xs: clamp(0.72rem, 0.70rem + 0.1vw, 0.78rem);
+  --fs-sm: clamp(0.84rem, 0.80rem + 0.15vw, 0.92rem);
+  --fs-base: clamp(0.95rem, 0.92rem + 0.15vw, 1.02rem);
+  --fs-lg: clamp(1.05rem, 1rem + 0.25vw, 1.2rem);
+  --fs-xl: clamp(1.2rem, 1.1rem + 0.5vw, 1.5rem);
+  --fs-2xl: clamp(1.5rem, 1.3rem + 1vw, 2.1rem);
+  --fs-3xl: clamp(1.9rem, 1.5rem + 2vw, 2.8rem);
   --line: 1.5;
+  --tracking-tight: -0.011em;
 
-  --sidebar-w: 248px;
-  --header-h: 56px;
-  --bottom-nav-h: 64px;
+  /* Easing. Spring uses linear() where supported, with a cubic fallback (see motion below). */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease: var(--ease-out-expo);
+
+  /* Durations */
+  --d-1: 80ms;
+  --d-2: 160ms;
+  --d-3: 240ms;
+  --d-4: 400ms;
+  --d-5: 700ms;
+  --dur-fast: var(--d-2);
+  --dur: var(--d-3);
+
+  /* Layout */
+  --sidebar-w: 264px;
+  --header-h: 60px;
+  --bottom-nav-h: 72px;
   --touch: 44px;
-
-  --dur-fast: 120ms;
-  --dur: 220ms;
-  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
-/* Urdu: Nastaliq needs taller lines and its own face. */
+@supports (transition-timing-function: linear(0, 1)) {
+  :root {
+    --ease-spring: linear(
+      0, 0.009 2.1%, 0.035 4.3%, 0.141 9%, 0.45 17.6%, 0.821 27.6%, 1.04 35.8%,
+      1.05 40.8%, 1.02 47.4%, 0.997 54.8%, 1 65.6%, 1
+    );
+  }
+}
+
+/* Urdu: Nastaliq needs taller lines, its own face and a larger size. */
 :root:lang(ur) {
   --font-body: var(--font-urdu);
-  --fs-base: 1.1rem;
+  --font-num: var(--font-latin);
+  --fs-base: clamp(1.05rem, 1rem + 0.25vw, 1.2rem);
   --line: 2;
 }

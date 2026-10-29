@@ -1,16 +1,39 @@
-/* Page-level styles: auth screens, settings and stub pages. */
+/* Page-level styles: auth screens, hero banner, celebration overlay, flying thumbnails and the styleguide. */
+
+/* ---------- Auth ---------- */
 
 .auth-shell {
+  position: relative;
   display: grid;
   place-items: center;
   min-height: 100dvh;
   padding: var(--space-4);
-  background: linear-gradient(160deg, var(--c-brand-soft), var(--c-bg) 60%);
+  overflow: hidden;
+  background: var(--c-bg);
+}
+
+.auth-shell::before {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(40% 40% at 20% 30%, var(--accent-teal-soft), transparent 70%),
+    radial-gradient(35% 35% at 80% 70%, var(--accent-blue-soft), transparent 70%);
+  animation: mesh-drift 18s ease-in-out infinite;
+  pointer-events: none;
 }
 
 .auth-card {
+  position: relative;
   width: min(440px, 100%);
   padding: var(--space-6);
+  border-radius: var(--radius-xl);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-3);
+  animation: modal-in var(--d-5) var(--ease-spring);
 }
 
 .auth-brand {
@@ -59,4 +82,316 @@
   .auth-card {
     padding: var(--space-8);
   }
+}
+
+/* ---------- Hero banner: mesh, floating capsules, ECG line ---------- */
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  padding: var(--space-6);
+  border-radius: var(--radius-xl);
+  color: #ffffff;
+  background: linear-gradient(135deg, #047857 0%, #0f766e 55%, #0e7490 100%);
+  box-shadow: var(--shadow-glow-brand), var(--shadow-2);
+  min-height: 200px;
+}
+
+/* Mesh: two soft radial blobs drifting by transform. No blur filter, which is expensive to paint. */
+.hero::before,
+.hero::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  width: 70%;
+  height: 160%;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.hero::before {
+  inset-inline-start: -10%;
+  top: -40%;
+  background: radial-gradient(closest-side, #5eead4, transparent);
+  animation: mesh-drift 14s ease-in-out infinite;
+}
+
+.hero::after {
+  inset-inline-end: -10%;
+  bottom: -50%;
+  background: radial-gradient(closest-side, #67e8f9, transparent);
+  animation: mesh-drift 18s ease-in-out infinite reverse;
+}
+
+.hero-title {
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.hero-sub {
+  margin-block-start: var(--space-2);
+  color: rgb(255 255 255 / 0.85);
+}
+
+.hero-ecg {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  width: 100%;
+  height: 64px;
+  opacity: 0.8;
+}
+
+.hero-ecg path {
+  fill: none;
+  stroke: rgb(255 255 255 / 0.9);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: draw-line 2.4s var(--ease-out-expo) forwards;
+}
+
+.capsule {
+  position: absolute;
+  width: 46px;
+  height: 18px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, rgb(255 255 255 / 0.55), rgb(255 255 255 / 0.12));
+  border: 1px solid rgb(255 255 255 / 0.35);
+  top: var(--y, 20%);
+  inset-inline-end: var(--x, 10%);
+  --r: var(--rot, 0deg);
+  animation: float-capsule var(--t, 6s) ease-in-out infinite;
+  pointer-events: none;
+}
+
+.capsule--half {
+  background: linear-gradient(90deg, #ffffff 50%, rgb(255 255 255 / 0.25) 50%);
+  opacity: 0.45;
+}
+
+/* ---------- Celebration (sale success) ---------- */
+
+.celebrate {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: rgb(4 120 87 / 0.92);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  color: #ffffff;
+  animation: scrim-in var(--d-3) var(--ease-out-expo);
+  overflow: hidden;
+}
+
+.celebrate-inner {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-4);
+  text-align: center;
+  animation: celebrate-in var(--d-4) var(--ease-spring);
+}
+
+.celebrate-check {
+  width: 120px;
+  height: 120px;
+}
+
+.celebrate-check circle {
+  fill: rgb(255 255 255 / 0.16);
+  stroke: #ffffff;
+  stroke-width: 3;
+  stroke-dasharray: 340;
+  stroke-dashoffset: 340;
+  animation: draw-line var(--d-5) var(--ease-out-expo) forwards;
+  transform-origin: center;
+}
+
+.celebrate-check path {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 80;
+  stroke-dashoffset: 80;
+  animation: draw-line var(--d-4) var(--ease-out-expo) 500ms forwards;
+}
+
+.celebrate-receipt {
+  width: min(280px, 80vw);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: #ffffff;
+  color: var(--n-900);
+  box-shadow: var(--shadow-3);
+  font-variant-numeric: tabular-nums;
+  animation: receipt-out var(--d-5) var(--ease-spring) 300ms both;
+}
+
+.celebrate-receipt .row {
+  justify-content: space-between;
+  padding-block: 4px;
+  font-size: var(--fs-sm);
+}
+
+.confetti {
+  position: absolute;
+  top: 0;
+  inset-inline-start: var(--x, 50%);
+  width: 10px;
+  height: 18px;
+  border-radius: var(--radius-pill);
+  background: var(--c, #fcd34d);
+  animation: confetti-fall var(--t, 2.6s) var(--ease-out-expo) var(--delay, 0ms) forwards;
+  pointer-events: none;
+}
+
+/* ---------- Flying thumbnail (add to cart) ---------- */
+
+.fly-thumb {
+  position: fixed;
+  top: 0;
+  inset-inline-start: 0;
+  z-index: 95;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius);
+  background: var(--accent-teal-grad, var(--grad-brand));
+  box-shadow: var(--shadow-2);
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+/* ---------- Styleguide (dev only) ---------- */
+
+.sg-toolbar {
+  position: sticky;
+  top: var(--header-h);
+  z-index: 15;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-3);
+  margin-block-end: var(--space-6);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+}
+
+.sg-section {
+  display: grid;
+  gap: var(--space-4);
+  margin-block-end: var(--space-10);
+}
+
+.sg-section > h2 {
+  margin: 0;
+  padding-block-end: var(--space-2);
+  border-block-end: 1px solid var(--c-border);
+}
+
+.sg-grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: 1fr;
+}
+
+.sg-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.sg-note {
+  font-size: var(--fs-sm);
+  color: var(--c-text-muted);
+}
+
+.swatch {
+  display: grid;
+  gap: var(--space-1);
+  font-size: var(--fs-xs);
+}
+
+.swatch-chip {
+  height: 56px;
+  border-radius: var(--radius);
+  border: 1px solid var(--c-border);
+}
+
+.type-sample {
+  margin: 0;
+}
+
+.sg-stage {
+  position: relative;
+  min-height: 120px;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--c-border-strong);
+  background: var(--c-surface);
+  overflow: hidden;
+}
+
+.sg-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sg-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+}
+
+.sg-cart-target {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.sg-grid.cols-4 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (min-width: 640px) {
+  .sg-grid.cols-2 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .sg-grid.cols-3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .sg-grid.cols-4 {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* Styleguide RTL preview: the page is right-to-left while the toggle is on. */
+.sg-rtl-preview {
+  direction: rtl;
 }

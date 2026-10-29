@@ -165,4 +165,7 @@ export default {
   'modal.logoutTitle': 'Log out?',
   'modal.logoutMessage': 'You will need the owner password to open the app again.',
   'toast.loggedOut': 'Logged out.',
+
+  'palette.placeholder': 'Jump to a page or medicine…',
+  'styleguide.title': 'Styleguide',
 };

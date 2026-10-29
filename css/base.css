@@ -1,3 +1,5 @@
+/* Base: reset, typography, focus, glass fallbacks and utilities. */
+
 *,
 *::before,
 *::after {
@@ -6,16 +8,21 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
 }
 
 body {
   margin: 0;
   min-height: 100dvh;
-  background: var(--c-bg);
+  background:
+    radial-gradient(1100px 520px at 110% -10%, var(--accent-teal-soft), transparent 60%),
+    radial-gradient(900px 480px at -10% 110%, var(--accent-blue-soft), transparent 60%),
+    var(--c-bg);
   color: var(--c-text);
   font-family: var(--font-body);
   font-size: var(--fs-base);
   line-height: var(--line);
+  font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
 }
 
@@ -26,13 +33,22 @@ p {
   margin-block: 0;
 }
 
+h1 {
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  letter-spacing: var(--tracking-tight);
+}
+
 h2 {
   font-size: var(--fs-xl);
+  font-weight: 700;
+  letter-spacing: var(--tracking-tight);
   margin-block-end: var(--space-3);
 }
 
 h3 {
   font-size: var(--fs-lg);
+  font-weight: 600;
   margin-block-end: var(--space-2);
 }
 
@@ -57,9 +73,10 @@ button {
   cursor: pointer;
 }
 
+/* Focus is a soft animated ring, never removed. */
 :focus-visible {
-  outline: 3px solid var(--c-focus);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: 0 0 0 3px var(--c-focus-ring);
   border-radius: var(--radius-sm);
 }
 
@@ -102,16 +119,31 @@ button {
   font-size: var(--fs-sm);
 }
 
-/* Numbers stay left-to-right even inside Urdu (RTL) text. */
-.money {
+/* Money and counters: tabular digits, always left-to-right. */
+.money,
+.num-tabular {
   direction: ltr;
   unicode-bidi: isolate;
   display: inline-block;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: tabular-nums lining-nums;
   white-space: nowrap;
 }
 
 .ltr {
   direction: ltr;
   unicode-bidi: isolate;
+}
+
+/* Glass: blurred translucent surface. Solid fallback where backdrop-filter is missing. */
+.glass {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+}
+
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .glass {
+    background: var(--c-surface);
+  }
 }

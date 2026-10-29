@@ -1,43 +1,151 @@
-/* Keyframes and motion rules. Page transitions run from anim.js (Web Animations API). */
+/* Keyframes and motion rules. Motion uses transform and opacity. Exceptions, all decorative and
+   noted in docs/MOTION.md: blob-morph (border-radius), draw-line (stroke-dashoffset, the ECG and
+   chart lines), bar-slide (the loading bar), flash-ok (colour). Page transitions run from anim.js. */
 
-@keyframes bar-slide {
-  from {
-    inset-inline-start: -40%;
-  }
-  to {
-    inset-inline-start: 100%;
-  }
+@keyframes scrim-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes fade-up {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px) scale(0.985); }
+  to { opacity: 1; transform: none; }
 }
 
 @keyframes toast-in {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+  from { opacity: 0; transform: translateY(14px) scale(0.96); }
+  to { opacity: 1; transform: none; }
 }
 
-.modal {
-  animation: fade-up var(--dur) var(--ease);
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.94) translateY(10px); }
+  to { opacity: 1; transform: none; }
 }
 
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: none; }
+}
+
+@keyframes ripple-out {
+  to { transform: translate(-50%, -50%) scale(42); opacity: 0; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes spin-slow {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes check-pop {
+  from { transform: rotate(45deg) translate(-2px, -2px) scale(0); opacity: 0; }
+  to { transform: rotate(45deg) translate(-2px, -2px) scale(1); opacity: 1; }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-7px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(2px); }
+}
+
+@keyframes shine {
+  from { transform: translateX(-120%) skewX(-18deg); }
+  to { transform: translateX(340%) skewX(-18deg); }
+}
+
+@keyframes icon-bounce {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.14) rotate(-4deg); }
+  65% { transform: scale(0.96) rotate(2deg); }
+  100% { transform: scale(1); }
+}
+
+@keyframes ring-pulse {
+  0% { opacity: 0.8; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.7); }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.45); opacity: 0.45; }
+}
+
+@keyframes flash-ok {
+  0% { background: var(--c-ok); color: #ffffff; }
+  100% { background: var(--c-ok-soft); color: var(--c-ok); }
+}
+
+@keyframes blob-morph {
+  0%, 100% { border-radius: 42% 58% 70% 30% / 45% 45% 55% 55%; }
+  33% { border-radius: 70% 30% 46% 54% / 30% 62% 38% 70%; }
+  66% { border-radius: 30% 70% 58% 42% / 62% 36% 64% 38%; }
+}
+
+@keyframes shimmer {
+  to { transform: translateX(100%); }
+}
+
+@keyframes grow-y {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
+@keyframes draw-line {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes bar-slide {
+  from { inset-inline-start: -40%; }
+  to { inset-inline-start: 100%; }
+}
+
+@keyframes confetti-fall {
+  0% { opacity: 0; transform: translate(0, -20px) rotate(0deg); }
+  10% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--dx, 0px), var(--dy, 90vh)) rotate(var(--rot, 540deg)); }
+}
+
+@keyframes receipt-out {
+  from { opacity: 0; transform: translateY(40px) rotate(-2deg); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes celebrate-in {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes float-capsule {
+  0%, 100% { transform: translate(0, 0) rotate(var(--r, 0deg)); }
+  50% { transform: translate(var(--fx, 6px), var(--fy, -14px)) rotate(calc(var(--r, 0deg) + 8deg)); }
+}
+
+@keyframes mesh-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(4%, -3%) scale(1.08); }
+}
+
+@keyframes fly-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+
+.modal,
 .toast {
-  animation: toast-in var(--dur) var(--ease);
+  will-change: transform, opacity;
 }
+
+/* ---------- Reduced motion: keep fades, drop movement, loops and sweeps ---------- */
 
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -48,4 +156,42 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+
+  .skeleton::after,
+  .empty-blob,
+  .empty-blob .icon,
+  .bottom-link--center .sell-orb::after,
+  .btn.is-loading::after {
+    animation: none !important;
+  }
+
+  .tile,
+  .card--interactive:hover,
+  [data-magnetic] {
+    transform: none !important;
+    translate: none !important;
+  }
+}
+
+/* Same rules, switched on by the styleguide toggle (html.reduce-motion). */
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+.reduce-motion .skeleton::after,
+.reduce-motion .empty-blob,
+.reduce-motion .empty-blob .icon,
+.reduce-motion .bottom-link--center .sell-orb,
+.reduce-motion .btn.is-loading::after {
+  animation: none !important;
+}
+
+.reduce-motion .tile,
+.reduce-motion [data-magnetic] {
+  transform: none !important;
+  translate: none !important;
 }
