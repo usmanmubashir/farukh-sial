@@ -12,6 +12,7 @@ import * as anim from './core/anim.js';
 import { seedDefaultAccounts } from './services/ledger.js';
 import { getSettings } from './services/settings.js';
 import { setDigitStyle } from './core/numbers.js';
+import { openSyncSheet } from './pages/_sync-sheet.js';
 
 const page = (name) => () => import(`./pages/${name}.js`);
 
@@ -70,11 +71,70 @@ const GROUPS = [
 /** Mobile bottom bar, left to right: Home, Stock, floating Sell, Expiry, then More (opens the drawer). */
 const BOTTOM = ['home', 'stock', 'sell', 'expiry'];
 
-/** Offline shell: the service worker caches the app; this registers it once the page has loaded. */
+/**
+ * Offline shell: the service worker caches the app. A new version waits until the owner taps Reload in the
+ * "New version available" bar, so no screen changes under them mid-sale. Reloads only when a page was already
+ * controlled, so the first install does not reload.
+ */
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch((err) => console.warn('[sw] registration failed', err));
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloading) return;
+    reloading = true;
+    location.reload();
+  });
+  window.addEventListener('load', async () => {
+    try {
+      const registration = await navigator.serviceWorker.register('sw.js');
+      const offer = (worker) => {
+        if (hadController) showUpdateBar(worker);
+      };
+      if (registration.waiting) offer(registration.waiting);
+      registration.addEventListener('updatefound', () => {
+        const worker = registration.installing;
+        worker?.addEventListener('statechange', () => {
+          if (worker.state === 'installed' && navigator.serviceWorker.controller) offer(worker);
+        });
+      });
+      setInterval(() => registration.update().catch(() => {}), 60 * 60 * 1000);
+    } catch (err) {
+      console.warn('[sw] registration failed', err);
+    }
+  });
+}
+
+function showUpdateBar(worker) {
+  if ($('#update-bar').length) return;
+  const $bar = $(`<div class="update-bar" id="update-bar" role="status"><span></span><button type="button" class="btn btn-primary btn-sm"></button></div>`);
+  $bar.find('span').text(i18n.t('update.available'));
+  $bar
+    .find('button')
+    .text(i18n.t('update.reload'))
+    .on('click', () => worker.postMessage({ type: 'SKIP_WAITING' }));
+  $('#app').append($bar);
+}
+
+/** The install button in the header. Shown only when the browser offers an install prompt. */
+function bindInstall() {
+  let deferred = null;
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    deferred = event;
+    $('#install-btn').prop('hidden', false);
+  });
+  window.addEventListener('appinstalled', () => {
+    deferred = null;
+    $('#install-btn').prop('hidden', true);
+  });
+  $('#install-btn').on('click', async () => {
+    if (!deferred) return;
+    const prompt = deferred;
+    deferred = null;
+    $('#install-btn').prop('hidden', true);
+    prompt.prompt();
+    await prompt.userChoice.catch(() => null);
   });
 }
 
@@ -188,26 +248,43 @@ function renderNav() {
   highlightNav();
 }
 
-function renderNet(online) {
-  $('#net-status').text(i18n.t(online ? 'net.online' : 'net.offline')).toggleClass('is-offline', !online);
-  $('#offline-banner').prop('hidden', online);
-}
+/**
+ * The status pill: Offline, Saved on this device (no server yet), Syncing (pulses), Synced (flashes green when a
+ * sync finishes) or Sync error. Tapping it opens the sync sheet.
+ */
+function renderPill() {
+  const online = store.get('online');
+  const s = sync.getStatus();
+  let state = 'synced';
+  if (!online) state = 'offline';
+  else if (!s.configured) state = s.pending ? 'saved' : 'online';
+  else if (s.state === 'error' || s.state === 'auth') state = 'error';
+  else if (s.state === 'syncing' || s.pending) state = 'syncing';
 
-/** The status pill says "Syncing" and pulses while changes wait to be sent, and flashes green when all are sent. */
-function renderSync(pending) {
-  // Changes wait in the outbox while no sync server is configured. That is not "syncing".
-  const syncing = pending > 0 && sync.syncActive();
+  const labels = {
+    offline: 'net.offline',
+    saved: 'header.savedHere',
+    online: 'net.online',
+    error: 'header.syncError',
+    syncing: 'header.syncing',
+    synced: 'header.synced',
+  };
   const $pill = $('#net-status');
-  $pill.toggleClass('is-syncing', syncing);
-  if (syncing && store.get('online')) $pill.text(i18n.t('header.syncing'));
-  else renderNet(store.get('online'));
-  if (wasSyncing && !syncing) {
+  $pill
+    .text(i18n.t(labels[state]))
+    .attr('data-state', state)
+    .toggleClass('is-offline', state === 'offline')
+    .toggleClass('is-error', state === 'error')
+    .toggleClass('is-syncing', state === 'syncing');
+  $('#offline-banner').prop('hidden', online);
+
+  if (wasSyncing && state === 'synced') {
     $pill.removeClass('is-synced');
     $pill[0].offsetWidth; // restart the flash
     $pill.addClass('is-synced');
     setTimeout(() => $pill.removeClass('is-synced'), 950);
   }
-  wasSyncing = syncing;
+  wasSyncing = state === 'syncing';
 }
 
 function onRouteAfter({ to, module }) {
@@ -269,26 +346,27 @@ function bindShell() {
   store.subscribe('lang', () => {
     renderNav();
     renderAvatar();
+    renderPill();
     i18n.apply(document);
     router.refresh();
   });
-  store.subscribe('online', (online) => {
-    renderNet(online);
-    renderSync(store.get('syncPending'));
-  });
+  store.subscribe('online', renderPill);
+  events.on('sync:status', renderPill);
   store.subscribe('pharmacyName', (name) => {
     $('#pharmacy-name').text(name || '');
     renderAvatar();
   });
   store.subscribe('session', renderAvatar);
-  store.subscribe('syncPending', renderSync);
+  store.subscribe('syncPending', renderPill);
   $('#pharmacy-name').text(store.get('pharmacyName') || '');
   events.on('route:loading', (busy) => ui.setBusy(busy));
   events.on('route:after', onRouteAfter);
 
   window.addEventListener('online', () => store.set('online', true));
   window.addEventListener('offline', () => store.set('online', false));
-  renderNet(navigator.onLine);
+  $('#net-status').on('click', openSyncSheet).attr('aria-label', i18n.t('header.syncStatusLabel'));
+  bindInstall();
+  renderPill();
 
   $('#menu-btn').on('click', () => setDrawer(true));
   $(document).on('click', '[data-action="open-menu"]', () => setDrawer(true));
@@ -343,11 +421,13 @@ async function boot() {
   await seedDefaultAccounts();
   await auth.restoreSession();
   setDigitStyle((await getSettings()).numberDigits);
+  // Ask once for durable storage, so the browser does not clear the records when space runs short.
+  navigator.storage?.persist?.().catch(() => {});
 
   router.beforeEach(accessGuard);
   bindShell();
   renderAvatar();
-  sync.init();
+  await sync.init();
   router.start();
   $('#app').removeClass('is-booting');
 }

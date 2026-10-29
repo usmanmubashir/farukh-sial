@@ -13,8 +13,12 @@ import { APP_VERSION } from '../core/version.js';
 import { ServiceError } from './errors.js';
 
 export const BACKUP_FORMAT = 'shifa-pos-backup';
-const EXCLUDED_STORES = ['users', 'outbox'];
-const LOCAL_SETTINGS = ['deviceId', 'session', 'lastBackupAt'];
+/** Never in a backup: passwords (users), the pending sends (outbox) and this device's sync cursor (syncState). */
+const EXCLUDED_STORES = ['users', 'outbox', 'syncState'];
+/** Device-only settings: this device's identity, sign-in, backup time and sync connection. */
+const LOCAL_SETTINGS = ['deviceId', 'session', 'lastBackupAt', 'syncConfig', 'syncSession'];
+/** Backups from schema 3 (before sync) still restore. They simply carry no tombstones or stamps. */
+const OLDEST_BACKUP_SCHEMA = 3;
 
 async function sha256Hex(text) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -100,7 +104,7 @@ export async function readBackupFile(file) {
  * data does not match its checksum (the file was damaged or edited).
  */
 export async function validateBackup(parsed) {
-  if (parsed.schemaVersion !== db.DB_VERSION) {
+  if (!(parsed.schemaVersion >= OLDEST_BACKUP_SCHEMA && parsed.schemaVersion <= db.DB_VERSION)) {
     throw new ServiceError('backupSchema', { found: parsed.schemaVersion, expected: db.DB_VERSION });
   }
   const checksum = await sha256Hex(JSON.stringify(parsed.stores));

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0f766e">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="apple-touch-icon" href="icons/icon.svg">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
   <meta name="description" content="Shifa Pharmacy POS: offline-first pharmacy management.">
   <title>Shifa Pharmacy POS</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f766e'/%3E%3Cpath d='M16 7v18M7 16h18' stroke='%23fff' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
@@ -68,7 +68,8 @@
         </button>
         <h1 class="page-title" id="page-title"></h1>
         <div class="header-actions">
-          <span class="status-pill" id="net-status" role="status"></span>
+          <button type="button" class="status-pill" id="net-status" aria-live="polite"></button>
+          <button type="button" class="pill-btn" id="install-btn" data-i18n="header.installApp" hidden></button>
           <button type="button" class="pill-btn" id="lang-btn" data-i18n="lang.switch">اردو</button>
           <div class="avatar-wrap" id="avatar-wrap">
             <button type="button" class="avatar" id="avatar-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="avatar-menu" data-i18n-attr="aria-label:menu.account">

@@ -7,6 +7,7 @@ Local database: IndexedDB `shifa-pos`, schema version **3** (see `js/core/db.js`
 | 1 | Base schema: products, batches, stock movements, parties, sales, purchases, returns, ledger, vouchers, demand list, settings, counters, outbox, users |
 | 2 | Adds `rxRegister` (one row per Rx or controlled line sold, for the Rx register) |
 | 3 | Adds the daily rollups for reports: `dailySales`, `dailyProducts`, `dailyLedger` (local, derived; see the rollups note below the store list) |
+| 4 | Sync: adds the `tombstones` store, and a `stamp` on every synced row (existing rows get legacy stamps on upgrade). Backups from version 3 still restore. |
 Every write goes through `db.transaction()`, which also queues synced rows in `outbox` in the same transaction.
 
 ## Conventions
@@ -19,7 +20,7 @@ Every write goes through `db.transaction()`, which also queues synced rows in `o
 - **`batches.onHand` is a cache** of the movement sum. Only `applyMovementIn()` writes it. `recalculateStock()` rebuilds it, and `checkIntegrity()` reports any batch where the cache and the movements disagree.
 - **Document numbers** come from `counters` (`ctx.nextNumber('doc:<kind>')`) and are formatted as `PREFIX-0001`, or `PREFIX-<devicePrefix>-0001` when the device prefix is set (SALE, PUR, SRN, PRN, RCV, PAY, TRF, ADJ). A failed transaction does not consume a number.
 - **Double entry**: every business document posts ledger rows whose debits equal credits (`ledgerEntries`).
-- **Synced vs local**: stores in `SYNCED_STORES` go to the outbox. `settings`, `counters`, `outbox`, `syncState` and `users` are device-local.
+- **Synced vs local**: stores in `SYNCED_STORES` go to the outbox. `settings`, `counters`, `outbox`, `syncState` and `users` are device-local. `tombstones` is device-local too, but it is part of the sync state and goes into backups.
 - **Passwords** exist only in `users` (PBKDF2-SHA256, salted). `users` is never synced and never included in backups.
 
 ## Stores
@@ -44,7 +45,8 @@ Every write goes through `db.transaction()`, which also queues synced rows in `o
 | demandList | id | productId, status | yes | `name`, `nameKey`, `packs`, `reason` (low_stock, not_found, manual), `status` (open, ordered), `note`, `supplierId` (preferred supplier, optional; set from the order list) |
 | settings | key | — | no | `{ key, value }`. Keys: `business` (business rules: the sale, purchase, printing, tax, session, backup reminder and document settings), `profile` (pharmacy profile: name, Urdu name, address, phone, NTN, licence, qualified person, receipt footer, currency), `pharmacyName` (kept equal to the profile name), `closing.<date>` (counted cash on the daily closing, in paisa), `rollups` (version of the report rollups). Device-only keys, never in a backup: `deviceId`, `session`, `lastBackupAt` |
 | counters | key | — | no | `{ key, value }`. Last issued number per sequence |
-| syncState | key | — | no | Sync cursor and adapter state |
+| syncState | key | — | no | Sync cursor (`cursor`). Device-only: not in backups |
+| tombstones | id (`store:key`) | — | no | One row per deleted synced row: `{ store, key, stamp }`. Blocks older copies from coming back. In backups |
 | dailySales | date | — | no | Rollup, one row per day: `invoices`, `subtotal`, `discount`, `tax`, `total`, `cost`, `profit`, `cash`, `bank`, `credit`. Live sales only |
 | dailyProducts | key (`date\|productId`) | date | no | Rollup, one row per day and medicine: `units`, `lines`, `amount`, `net` (net of tax, allocated per line), `cost`, `profit` |
 | dailyLedger | key (`accountCode\|date\|group`) | accountCode | no | Rollup of the cash account (1000) per day and kind of movement: `debit`, `credit` |
@@ -139,14 +141,23 @@ Popular medicines (`js/services/seed-medicines.js`) import without prices. Impor
 
 Batch expiry alerts, customer credit limits, and backup/restore metadata will be added as new migrations (`migrations[1]` and later). Existing migrations are not edited.
 
+## Sync fields (schema version 4)
+
+Every row in a synced store carries `stamp`, the time and device of its last change: `"001793271840718.000000.<deviceId>"`. Stamps are fixed width, so they compare as strings. Rows written before version 4 got a `legacy` stamp when the database upgraded.
+
+`tombstones` (one row per deleted synced row): `{ id: "<store>:<key>", store, key, stamp }`. A put older than a tombstone is ignored. Tombstones travel in backups and snapshots.
+
 ## Outbox row
 
 ```
-{ seq: 12, store: "products", op: "put", key: "<uuid>", record: { ...row },
+{ seq: 12, opId: "001793271840718.000000.<deviceId>", stamp: "001793271840718.000000.<deviceId>",
+  store: "products", op: "put", key: "<uuid>", record: { ...row, stamp },
   status: "pending", createdAt: "2026-10-29T10:00:00.000Z", attempts: 0 }
 ```
 
-`sync.flush()` sends pending rows through the adapter and removes the ones it acknowledges.
+`opId` is the idempotency key the server stores. A row leaves the outbox only after the server confirms it (`js/core/sync.js`, `pushAll`).
+
+Settings rows used by sync (device-only, excluded from backups): `deviceId` (existing), `syncConfig` `{ url, anonKey, email }`, `syncSession` `{ accessToken, refreshToken, expiresAt }`. `syncState` holds the server cursor under `cursor`; it is excluded from backups too.
 
 ## Browser-local UI preferences (localStorage, not business data)
 

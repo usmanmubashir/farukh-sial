@@ -64,13 +64,22 @@ export function accountKind(account) {
   return null;
 }
 
-/** Creates any missing system accounts. Idempotent, so it is safe on every boot. Returns how many were created. */
+/**
+ * Stamp of the system accounts. Every device writes the same rows with this fixed stamp, so they are the same
+ * baseline everywhere and never count as a change to sync. Any real change to an account is newer and wins.
+ */
+export const SEED_STAMP = '000000000000000.000000.seed';
+
+/**
+ * Creates any missing system accounts. Idempotent, so it is safe on every boot. Returns how many were created.
+ * Written through the replication path: the seed is the same on every device, so it is not queued for sync.
+ */
 export function seedDefaultAccounts() {
-  return db.transaction(async (ctx) => {
+  return db.replicate(async (ctx) => {
     let created = 0;
     for (const account of DEFAULT_ACCOUNTS) {
       if (!(await ctx.get('accounts', account.id))) {
-        ctx.put('accounts', { ...account, system: true });
+        ctx.put('accounts', { ...account, system: true, stamp: SEED_STAMP });
         created += 1;
       }
     }

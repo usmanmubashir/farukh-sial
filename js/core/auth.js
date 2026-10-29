@@ -45,11 +45,12 @@ export async function isSetupDone() {
 }
 
 /** Creates the device id on first run. It never changes afterwards. */
+/** The device id, created once. It also ends every sync stamp this device makes, so it is set on the database layer. */
 export async function ensureDeviceId() {
   const existing = await db.getSetting('deviceId');
-  if (existing) return existing;
-  const id = db.newId();
-  await db.setSetting('deviceId', id);
+  const id = existing || db.newId();
+  if (!existing) await db.setSetting('deviceId', id);
+  db.setDeviceId(id);
   return id;
 }
 

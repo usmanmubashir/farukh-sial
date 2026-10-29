@@ -14,6 +14,7 @@ import { getProfile, getSettings, saveProfile, saveSettings } from '../services/
 import { bluetoothSupported, connectBluetoothPrinter, printInBrowser, printerConnected, printToBluetooth, sampleReceipt } from '../services/printing.js';
 import { checkIntegrity, recalculateStock } from '../services/stock.js';
 import { importProducts } from '../services/products.js';
+import * as sync from '../core/sync.js';
 import { popularMedicines } from '../services/seed-medicines.js';
 
 export const route = '/settings';
@@ -149,6 +150,53 @@ async function accountSection() {
   );
 }
 
+/** Sync server connection. The anon key and address stay on this device; the password is used once to sign in. */
+async function syncSection() {
+  const [config, s] = await Promise.all([sync.getConfig(), Promise.resolve(sync.getStatus())]);
+  const connected = s.configured;
+  const field = (id, name, label, type, value, help, extra = '') => `
+    <div class="field">
+      <label for="${id}">${esc(label)}</label>
+      <input id="${id}" name="${name}" type="${type}" autocomplete="off" spellcheck="false" value="${esc(value)}"${extra}>
+      ${help ? `<span class="hint">${esc(help)}</span>` : ''}
+    </div>`;
+  return section(
+    'set-sync',
+    t('settings.sync'),
+    `<p class="muted small">${esc(t('settings.syncHelp'))}</p>
+     <p class="set-sync-state">${esc(connected ? t('settings.syncConnected', { email: config?.email ?? '' }) : t('settings.syncNotConnected'))}</p>
+     <form class="set-form" data-form="sync" novalidate>
+       ${field('sy-url', 'url', t('settings.syncUrl'), 'url', config?.url ?? '', t('settings.syncUrlHelp'))}
+       ${field('sy-key', 'anonKey', t('settings.syncKey'), 'text', config?.anonKey ?? '', t('settings.syncKeyHelp'))}
+       ${field('sy-email', 'email', t('settings.syncEmail'), 'email', config?.email ?? '')}
+       ${field('sy-pass', 'password', t('settings.syncPassword'), 'password', '', t('settings.syncPasswordHelp'), ' autocomplete="current-password"')}
+       <p class="form-status muted small" role="status" aria-live="polite"></p>
+       <div class="row set-actions">
+         <button type="submit" class="btn btn-primary">${esc(t('settings.syncConnect'))}</button>
+         ${connected ? `<button type="button" class="btn btn-soft" data-action="sync-now">${esc(t('sync.now'))}</button><button type="button" class="btn btn-danger" data-action="sync-disconnect">${esc(t('settings.syncDisconnect'))}</button>` : ''}
+       </div>
+     </form>`,
+  );
+}
+
+async function saveSync(form) {
+  const values = Object.fromEntries(new FormData(form));
+  const $status = $(form).find('.form-status');
+  if (!values.url || !values.anonKey || !values.email || !values.password) {
+    $status.text(t('settings.syncNeedFields'));
+    return;
+  }
+  $status.text(t('sync.lineSyncing'));
+  try {
+    await sync.connect(values);
+    ui.toast(t('settings.syncDone'), { type: 'success' });
+    await paint();
+  } catch (err) {
+    console.warn('[settings] sync connect failed', err);
+    $status.text(t('settings.syncFailed', { reason: err?.message ?? String(err) }));
+  }
+}
+
 function appSection() {
   return section(
     'set-app',
@@ -207,13 +255,14 @@ function appearanceSection() {
 /* ---------- Painting ---------- */
 
 async function paint() {
-  const sections = await Promise.all([languageSection(), profileSection(), printerSection(), accountSection(), rulesSection()]);
+  const sections = await Promise.all([languageSection(), profileSection(), printerSection(), accountSection(), rulesSection(), syncSection()]);
   $host.html(`
     <div class="page-head"><h2>${esc(t(title))}</h2></div>
     ${sections[0]}
     ${sections[1]}
     ${sections[2]}
     ${sections[3]}
+    ${sections[5]}
     ${appSection()}
     ${sections[4]}
     ${appearanceSection()}`);
@@ -387,6 +436,16 @@ function bind() {
   $host.on('submit', '[data-form="password"]', (event) => {
     event.preventDefault();
     savePassword(event.currentTarget);
+  });
+  $host.on('submit', '[data-form="sync"]', (event) => {
+    event.preventDefault();
+    saveSync(event.currentTarget);
+  });
+  $host.on('click', '[data-action="sync-now"]', () => sync.syncNow());
+  $host.on('click', '[data-action="sync-disconnect"]', async () => {
+    await sync.disconnect();
+    ui.toast(t('settings.syncDisconnected'));
+    await paint();
   });
   $host.on('click', '[data-action]', (event) => {
     const action = event.currentTarget.getAttribute('data-action');

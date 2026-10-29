@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sync simulation</title>
+    <style>
+      body { font: 15px/1.5 system-ui, sans-serif; margin: 24px; color: #1f2937; background: #fff; }
+      h1 { font-size: 20px; margin: 0 0 8px; }
+      .muted { color: #6b7280; }
+      table { border-collapse: collapse; margin-top: 12px; min-width: 60%; }
+      td, th { padding: 6px 10px; border-bottom: 1px solid #e5e7eb; text-align: start; vertical-align: top; }
+      .ok { color: #047857; font-weight: 600; }
+      .bad { color: #b91c1c; font-weight: 600; }
+      #log { white-space: pre-wrap; font: 13px/1.5 ui-monospace, monospace; background: #f9fafb; padding: 10px; border-radius: 6px; max-height: 320px; overflow: auto; }
+      #summary { font-size: 17px; margin: 12px 0; }
+    </style>
+  </head>
+  <body>
+    <h1>Two-device sync simulation</h1>
+    <p class="muted">Each device is a separate iframe with its own IndexedDB, the real services and the real sync engine.
+      The server is an in-memory log in this page. Devices A and B go offline, keep selling, reconnect, and must converge.
+      Serve this folder over http (for example <code>node tests/serve.mjs</code>) so the frames share an origin.</p>
+    <p id="summary">Running…</p>
+    <table id="results" aria-live="polite"><thead><tr><th>Check</th><th>Result</th><th>Detail</th></tr></thead><tbody></tbody></table>
+    <h2 style="font-size:16px;margin-top:20px">Log</h2>
+    <div id="log"></div>
+
+    <script type="module">
+      // In-memory server with the same contract as the Supabase adapter's REST calls:
+      // ops are append-only and keyed by opId (repeats are ignored), pull returns ops after a seq cursor,
+      // and snapshots are chunks that count only once their '_meta' part is written.
+      const clone = (value) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
+      const server = {
+        seq: 0,
+        ops: [],
+        known: new Set(),
+        snapshots: new Map(),
+        order: [],
+        push(batch) {
+          for (const op of batch) {
+            if (this.known.has(op.opId)) continue;
+            this.known.add(op.opId);
+            this.seq += 1;
+            this.ops.push({ seq: this.seq, opId: op.opId, stamp: op.stamp, store: op.store, op: op.op, key: op.key, record: clone(op.record) });
+          }
+          return batch.map((op) => op.opId);
+        },
+        pull(cursor, limit) {
+          const rows = this.ops.filter((op) => op.seq > cursor).slice(0, limit);
+          return { ops: clone(rows), cursor: rows.length ? rows[rows.length - 1].seq : cursor };
+        },
+        snapshot(id) {
+          if (!this.snapshots.has(id)) this.snapshots.set(id, { cursor: 0, parts: new Map(), complete: false });
+          return this.snapshots.get(id);
+        },
+        latestSnapshot() {
+          const done = this.order.filter((id) => this.snapshots.get(id).complete);
+          if (!done.length) return null;
+          const id = done[done.length - 1];
+          return { id, cursor: this.snapshots.get(id).cursor };
+        },
+        readSnapshot(id, store, part) {
+          return clone(this.snapshot(id).parts.get(`${store}#${part}`) ?? []);
+        },
+        writeSnapshot(id, cursor, store, part, rows) {
+          const snap = this.snapshot(id);
+          snap.cursor = cursor;
+          snap.parts.set(`${store}#${part}`, clone(rows));
+        },
+        completeSnapshot(id, cursor) {
+          const snap = this.snapshot(id);
+          snap.cursor = cursor;
+          snap.complete = true;
+          this.order.push(id);
+        },
+      };
+      window.simServer = server;
+
+      const logEl = document.getElementById('log');
+      const log = (text) => {
+        logEl.textContent += `${text}\n`;
+      };
+      const results = [];
+      const check = (label, ok, detail = '') => {
+        results.push({ label, ok: Boolean(ok), detail: String(detail) });
+        log(`${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? `  (${detail})` : ''}`);
+      };
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+      /** Logs which stores and rows differ between two devices. Only runs when a convergence check fails. */
+      async function logDifferences(x, y) {
+        const sx = await x.dumpStores();
+        const sy = await y.dumpStores();
+        const byId = (rows) => new Map(rows.map((r) => [String(r.id ?? r.key), JSON.stringify(r)]));
+        for (const store of Object.keys(sx)) {
+          const mx = byId(sx[store]);
+          const my = byId(sy[store] ?? []);
+          const keys = [...new Set([...mx.keys(), ...my.keys()])].filter((k) => mx.get(k) !== my.get(k));
+          if (!keys.length) continue;
+          log(`DIFF ${store}: ${keys.length} row(s) differ, first ${keys[0]}`);
+          log(`  A: ${String(mx.get(keys[0]) ?? '(missing)').slice(0, 400)}`);
+          log(`  B: ${String(my.get(keys[0]) ?? '(missing)').slice(0, 400)}`);
+        }
+      }
+      let actions = 0;
+      const act = async (dev, label, fn) => {
+        actions += 1;
+        const value = await fn(dev);
+        log(`${String(actions).padStart(2, '0')}. [${dev.name}] ${label}`);
+        return value;
+      };
+
+      /** Starts a device iframe and returns its api once the device module has loaded. */
+      async function device(name) {
+        const frame = document.createElement('iframe');
+        frame.title = `Device ${name.toUpperCase()}`;
+        frame.src = `sync-device.html?device=${name}`;
+        frame.style.cssText = 'width:1px;height:1px;border:0;opacity:0;position:absolute';
+        document.body.append(frame);
+        for (let i = 0; i < 400 && !frame.contentWindow?.deviceReady; i += 1) await sleep(25);
+        const api = frame.contentWindow.api;
+        return { name, frame, ...Object.fromEntries(Object.keys(api).map((key) => [key, (...args) => api[key](...args)])) };
+      }
+
+      async function run() {
+        const A = await device('a');
+        const B = await device('b');
+        await Promise.all([A.setup('A'), B.setup('B')]);
+        log('Devices A and B are set up with empty databases and the simulated server.');
+
+        /* Phase 1: online. A sets up the catalogue. */
+        const panadol = await act(A, 'add Panadol 500 mg', () => A.product('Panadol 500 mg', 30));
+        const augmentin = await act(A, 'add Augmentin 625 mg', () => A.product('Augmentin 625 mg', 280));
+        await act(A, 'receive 20 packs of Panadol, batch PN-1', () => A.receive(panadol.id, 'PN-1', 20, 20));
+        await act(A, 'receive 5 packs of Augmentin, batch AG-1', () => A.receive(augmentin.id, 'AG-1', 5, 200));
+        const ali = await act(A, 'add customer Ali', () => A.customer('Ali'));
+        await A.settle();
+        await B.settle();
+        const bStats = await B.stats();
+        check('B receives A\'s catalogue on the first sync', bStats.products === 2 && bStats.batches === 2, `products ${bStats.products}, batches ${bStats.batches}`);
+
+        /* Phase 1b: online on B. */
+        const sara = await act(B, 'add customer Sara', () => B.customer('Sara'));
+        await act(B, 'set Panadol price to 32', () => B.setSalePrice(panadol.id, 32));
+        await A.settle();
+        await B.settle();
+
+        /* Phase 2: both offline. Sales, stock, ledger and price changes on both devices. */
+        A.setOffline(true);
+        B.setOffline(true);
+        log('-- both devices offline --');
+        await act(A, 'OFFLINE cash sale: 3 packs Panadol', () => A.sell(panadol.id, 3));
+        await act(A, 'OFFLINE credit sale: 2 packs Augmentin to Ali', () => A.sell(augmentin.id, 2, { customer: ali.id, credit: true }));
+        await act(A, 'OFFLINE receipt from Ali: 500', () => A.receipt(ali.id, 500));
+        await act(A, 'OFFLINE cash sale: 1 pack Augmentin', () => A.sell(augmentin.id, 1));
+        await act(A, 'OFFLINE stock adjustment: 1 Panadol unit damaged', () => A.adjust(panadol.id, -1, 'damaged'));
+        await act(B, 'OFFLINE cash sale: 4 packs Panadol', () => B.sell(panadol.id, 4));
+        await act(B, 'OFFLINE purchase: 6 packs Augmentin, batch AG-2', () => B.purchase(null, augmentin.id, 'AG-2', 6, 210));
+        await act(B, 'OFFLINE expense: 300 tea and tissues', () => B.expense(300, 'Tea and tissues'));
+        const credit = await act(B, 'OFFLINE credit sale: 2 packs Augmentin to Sara', () => B.sell(augmentin.id, 2, { customer: sara.id, credit: true }));
+        await act(B, 'OFFLINE void Sara\'s sale', () => B.voidSale(credit.sale?.id ?? credit.id));
+        await act(B, 'OFFLINE Augmentin price 290', () => B.setSalePrice(augmentin.id, 290));
+        await act(A, 'OFFLINE Augmentin price 295 (A changed it last)', () => A.setSalePrice(augmentin.id, 295));
+        await act(A, 'OFFLINE cash sale: 1 pack Panadol', () => A.sell(panadol.id, 1));
+
+        const aOffline = await A.stats();
+        const bOffline = await B.stats();
+        check('offline sales are queued in the outbox', aOffline.outboxPending > 0 && bOffline.outboxPending > 0, `A ${aOffline.outboxPending}, B ${bOffline.outboxPending} waiting`);
+
+        /* Phase 3: reconnect. A reconnects first, then B. Auto-sync runs on the 'online' event. */
+        // Reconnect without calling sync: the 'online' event must start it by itself.
+        A.setOffline(false);
+        await sleep(4000);
+        check('A sends its queue automatically on reconnect (no manual sync)', (await A.stats()).outboxPending === 0, `A outbox ${(await A.stats()).outboxPending}`);
+        B.setOffline(false);
+        await sleep(4000);
+        check('B sends its queue automatically on reconnect (no manual sync)', (await B.stats()).outboxPending === 0, `B outbox ${(await B.stats()).outboxPending}`);
+        await A.settle();
+        await B.settle();
+        await A.settle();
+
+        const [da, db2] = [await A.dump(), await B.dump()];
+        const sa = await A.stats();
+        const sb = await B.stats();
+        check('two devices converge: identical synced data', da === db2, `${da.length} characters per device`);
+        if (da !== db2) await logDifferences(A, B);
+        check('no negative stock on either device', sa.negativeBatches.length === 0 && sb.negativeBatches.length === 0);
+        check('ledgers balance on both devices (debit = credit)', sa.trialDifference === 0 && sb.trialDifference === 0, `differences ${sa.trialDifference} / ${sb.trialDifference}`);
+        check('outboxes empty after sync', sa.outboxPending === 0 && sb.outboxPending === 0);
+        check('no sync issues on either device', sa.status.issues.length === 0 && sb.status.issues.length === 0);
+        check('voided sale is voided on both', sa.voided === 1 && sb.voided === 1, `${sa.voided} / ${sb.voided}`);
+
+        const batchOnHand = async (dev, batchNo) => {
+          const rows = JSON.parse(await dev.dump()).batches;
+          return rows.find((b) => b.batchNo === batchNo)?.onHand;
+        };
+        check('Panadol batch PN-1 holds 119 units on both (200 − 30 − 40 − 1 − 10)', (await batchOnHand(A, 'PN-1')) === 119 && (await batchOnHand(B, 'PN-1')) === 119, `${await batchOnHand(A, 'PN-1')} / ${await batchOnHand(B, 'PN-1')}`);
+        check('Augmentin batch AG-1 holds 20 units on both (50 − 20 − 10)', (await batchOnHand(A, 'AG-1')) === 20 && (await batchOnHand(B, 'AG-1')) === 20);
+        check('Augmentin batch AG-2 holds 60 units on both (purchase, nothing sold)', (await batchOnHand(A, 'AG-2')) === 60 && (await batchOnHand(B, 'AG-2')) === 60);
+        const priceOf = async (dev) => JSON.parse(await dev.dump()).products.find((p) => p.name === 'Augmentin 625 mg')?.salePricePerPack;
+        check('last writer wins: Augmentin price is 295 on both (A changed it last)', (await priceOf(A)) === 29500 && (await priceOf(B)) === 29500, `${await priceOf(A)} / ${await priceOf(B)}`);
+
+        /* Phase 4: a new device starts from a snapshot, then takes the changes made after it. */
+        const published = await A.publishSnapshot();
+        check('A publishes a snapshot of the synced state', published === true);
+        const cdev = await device('c');
+        await cdev.setup('C');
+        await cdev.settle();
+        const dc = await cdev.dump();
+        check('new device C matches A after loading the snapshot', dc === await A.dump());
+        if (dc !== (await A.dump())) await logDifferences(A, cdev);
+        await act(B, 'after the snapshot: 1 cash sale of Panadol', () => B.sell(panadol.id, 1));
+        await B.settle();
+        await cdev.settle();
+        check('new device C takes the changes made after the snapshot', (await cdev.dump()) === (await B.dump()));
+
+        /* Phase 5: oversell, the one case the merge cannot make right. Each device saw 10 units and sold them. */
+        const tiny = await act(A, 'add Test tablet, one pack', () => A.product('Test tablet 10 mg', 10));
+        await act(A, 'receive 1 pack of Test tablet, batch TT-1', () => A.receive(tiny.id, 'TT-1', 1, 5));
+        await A.settle();
+        await B.settle();
+        A.setOffline(true);
+        B.setOffline(true);
+        await act(A, 'OFFLINE sell the last pack of Test tablet', () => A.sell(tiny.id, 1));
+        await act(B, 'OFFLINE sell the same last pack of Test tablet', () => B.sell(tiny.id, 1));
+        A.setOffline(false);
+        B.setOffline(false);
+        await A.settle();
+        await B.settle();
+        await A.settle();
+        const oa = await A.stats();
+        const ob = await B.stats();
+        check('oversell is reported, not hidden: negative batch seen on both', oa.negativeBatches.length === 1 && ob.negativeBatches.length === 1, `${JSON.stringify(oa.negativeBatches)}`);
+        check('oversell is listed as a sync issue on both', oa.status.issues.some((i) => i.kind === 'negative-stock') && ob.status.issues.some((i) => i.kind === 'negative-stock'));
+        check('the two devices still agree on the oversell', (await A.dump()) === (await B.dump()));
+
+        const failed = results.filter((r) => !r.ok).length;
+        const summary = document.getElementById('summary');
+        summary.innerHTML = `${failed === 0 ? '<span class="ok">All checks passed.</span>' : `<span class="bad">${failed} check(s) failed.</span>`} ${actions} changes made by hand across the devices, ${results.length} checks.`;
+        const body = document.querySelector('#results tbody');
+        for (const r of results) {
+          const row = document.createElement('tr');
+          row.innerHTML = `<td></td><td class="${r.ok ? 'ok' : 'bad'}">${r.ok ? 'PASS' : 'FAIL'}</td><td></td>`;
+          row.children[0].textContent = r.label;
+          row.children[2].textContent = r.detail;
+          body.append(row);
+        }
+        window.simResult = { passed: results.length - failed, failed, actions, results };
+        document.title = failed === 0 ? 'Sync simulation: PASS' : `Sync simulation: ${failed} FAIL`;
+      }
+
+      run().catch((err) => {
+        console.error(err);
+        log(`ERROR ${err?.stack ?? err}`);
+        document.getElementById('summary').textContent = `The simulation stopped: ${err?.message ?? err}`;
+        window.simResult = { error: String(err?.stack ?? err) };
+      });
+    </script>
+  </body>
+</html>

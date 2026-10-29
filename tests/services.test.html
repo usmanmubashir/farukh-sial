@@ -1022,8 +1022,15 @@
       damaged.stores.sales[0].total += 1;
       await fails('a changed record fails the checksum', () => backup.validateBackup(damaged), 'backupChecksum');
       const older = JSON.parse(text);
-      older.schemaVersion = db.DB_VERSION - 1;
-      await fails('another schema version is refused', () => backup.validateBackup(older), 'backupSchema');
+      older.schemaVersion = 2;
+      await fails('a schema version before 3 is refused', () => backup.validateBackup(older), 'backupSchema');
+      const preSync = JSON.parse(text);
+      preSync.schemaVersion = 3;
+      const preSyncOk = await backup.validateBackup(preSync).then(() => true, () => false);
+      eq('a schema 3 backup (made before sync) is accepted', preSyncOk, true);
+      const newer = JSON.parse(text);
+      newer.schemaVersion = db.DB_VERSION + 1;
+      await fails('a backup from a newer app version is refused', () => backup.validateBackup(newer), 'backupSchema');
       let notBackup = null;
       try {
         await backup.readBackupFile(new File(['this is not a backup'], 'x.json'));

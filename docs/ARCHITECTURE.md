@@ -97,12 +97,22 @@ The router calls `destroy()` on the previous page before it renders the next one
 - Sessions are stored in `settings` with a 24-hour expiry. The guard checks `isAuthenticated()`. An expired session still counts as signed in while offline, and forces a new login once the device is back online.
 - Device ID: generated once at boot and shown in Settings.
 
-## Sync (`js/core/sync.js`)
+## Sync (`js/core/sync.js`, `js/core/sync-supabase.js`, `js/services/replication.js`)
 
-- `outbox` holds every pending synced write. `flush()` hands up to 200 rows to the active adapter and removes the rows it acknowledges.
-- Adapter contract: `{ name, push(rows) → Promise<number[]> }` returns the acknowledged outbox `seq` values.
-- The default adapter is offline, so nothing is sent. The Supabase REST adapter is planned, and it plugs in through `useAdapter()`.
-- `flush()` runs on reconnection and about 1.5 seconds after a synced write.
+Full design in [SYNC.md](SYNC.md); the database side in [DATA_MODEL.md](DATA_MODEL.md).
+
+- Every synced write is stamped (`db.stamp()`) and queued in `outbox` in the same transaction. Deletes leave a row in `tombstones`.
+- Changes from other devices go through `db.replicate()`, which stores them as they arrive and queues nothing. `replication.js` holds the merge rules: last writer wins per record by stamp, movements merge by id, batch stock is recalculated from movements.
+- The engine (`sync.js`) runs push, then pull, then maybe a snapshot. It is triggered by start, reconnection, a write (3 s debounce), a 60 s timer, Background Sync, and "Sync now". It retries with backoff and never blocks the UI.
+- The server sits behind `setAdapter()`. `sync-supabase.js` is the default: plain `fetch` against Supabase Auth and REST, with row-level security per pharmacy (`docs/supabase.sql`).
+- The header pill shows offline, saved on this device, syncing, synced or error. Tapping it opens the sync sheet (`pages/_sync-sheet.js`).
+
+## Offline shell and updates (`sw.js`, `manifest.webmanifest`)
+
+- `sw.js` precaches the app shell under a versioned cache name (`VERSION` must match `js/core/version.js`; `scripts/audit-shell.mjs` checks it). Fonts from Google are cached at runtime.
+- A new version waits. The page shows "New version available" with Reload, and Reload asks the waiting worker to take over (`SKIP_WAITING`).
+- The install button in the header appears when the browser offers an install prompt.
+- The icons are PNG (192, 512 and a maskable 512), generated once by `scripts/make-icons.mjs` with no dependencies.
 
 ## Accessibility and motion
 
@@ -135,6 +145,6 @@ Backup (`#/backup`): back up now (download, or share on mobile with the Web Shar
 
 Number digits and dates: `js/core/numbers.js` holds the style; money and dates use it for display only. CSV files and stored values always use Western digits.
 
-Not yet: Bluetooth printing on hardware, camera scanning on a device, the Supabase adapter, and a service worker check in a real browser.
+Sync: the engine, the Supabase adapter, merge rules, the status pill, the sync sheet and Settings → Sync are in place. The two-device simulation (`tests/sync-sim.html`) passes 20 of 20 checks. Not yet run against a live Supabase project.
 
-Service worker and manifest: `sw.js` and `manifest.webmanifest` are in place with a precache list, but registration failed in the test browser ("unknown error when fetching the script"), so offline start has not been verified yet.
+Not yet: Bluetooth printing on hardware, camera scanning on a device, and a service worker check in a real browser. The in-app browser refuses to register any service worker from a local server (a trivial one too), so the offline start and the update bar are unverified. See [SYNC.md](SYNC.md#not-verified-yet).

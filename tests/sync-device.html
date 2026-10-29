@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sync test device</title>
+  </head>
+  <body>
+    <p>Test device. It is driven by tests/sync-sim.html, which loads it in an iframe. Each device has its own database.</p>
+    <script type="module">
+      // One simulated device: the real database layer, services and sync engine, with its own IndexedDB.
+      // The server is the in-memory simServer in the parent page (same origin), so no network is involved.
+      // Offline is simulated by overriding navigator.onLine, which the engine checks before every run.
+      import * as db from '../js/core/db.js';
+      import * as auth from '../js/core/auth.js';
+      import * as sync from '../js/core/sync.js';
+      import { saveSettings, getSettings } from '../js/services/settings.js';
+      import { createProduct, updateProduct } from '../js/services/products.js';
+      import { addBatch, adjust } from '../js/services/stock.js';
+      import { createSale, voidSale } from '../js/services/sales.js';
+      import { createPurchase } from '../js/services/purchases.js';
+      import { addParty } from '../js/services/parties.js';
+      import { expenseVoucher, receiptVoucher, seedDefaultAccounts, trialBalance } from '../js/services/ledger.js';
+
+      const name = new URLSearchParams(location.search).get('device') || 'a';
+      db.useDatabase(`shifa-sim-${name}`);
+
+      const net = { offline: false };
+      Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => !net.offline });
+
+      /** Adapter that talks to the parent page's in-memory server. Every call fails while this device is offline. */
+      class SimAdapter {
+        constructor(server) {
+          this.name = 'sim';
+          this.server = server;
+        }
+        wire() {
+          if (net.offline) throw new Error('simulated offline: no route to the server');
+        }
+        async auth() {}
+        async push(ops) {
+          this.wire();
+          return this.server.push(ops);
+        }
+        async pull(cursor, limit) {
+          this.wire();
+          return this.server.pull(cursor, limit);
+        }
+        async latestSnapshot() {
+          this.wire();
+          return this.server.latestSnapshot();
+        }
+        async readSnapshot(id, store, part) {
+          this.wire();
+          return this.server.readSnapshot(id, store, part);
+        }
+        async writeSnapshot(id, cursor, store, part, rows) {
+          this.wire();
+          return this.server.writeSnapshot(id, cursor, store, part, rows);
+        }
+        async completeSnapshot(id, cursor) {
+          this.wire();
+          return this.server.completeSnapshot(id, cursor);
+        }
+      }
+
+      const rupees = (value) => Math.round(value * 100);
+      const DAY = new Date().toISOString().slice(0, 10);
+      const EXPIRY = '2028-12-31';
+
+      /** The synced stores, as one canonical object. Two devices that converged give identical text. */
+      async function dump() {
+        const out = {};
+        for (const store of [...db.storeNames()].filter((s) => !['settings', 'counters', 'outbox', 'syncState', 'users', 'dailySales', 'dailyProducts', 'dailyLedger'].includes(s)).sort()) {
+          const rows = await db.getAll(store);
+          out[store] = rows.sort((a, b) => String(a.id ?? a.key).localeCompare(String(b.id ?? b.key)));
+        }
+        return JSON.stringify(out);
+      }
+
+      async function stats() {
+        const [products, batches, sales, ledger, pending, tomb] = await Promise.all([
+          db.getAll('products'),
+          db.getAll('batches'),
+          db.getAll('sales'),
+          db.getAll('ledgerEntries'),
+          db.count('outbox'),
+          db.getAll('tombstones'),
+        ]);
+        const trial = await trialBalance();
+        return {
+          products: products.length,
+          batches: batches.length,
+          sales: sales.length,
+          voided: sales.filter((s) => s.status === 'void').length,
+          ledgerLines: ledger.length,
+          negativeBatches: batches.filter((b) => (b.onHand ?? 0) < 0).map((b) => ({ id: b.id, onHand: b.onHand })),
+          trialDifference: trial.debit - trial.credit,
+          outboxPending: pending,
+          tombstones: tomb.length,
+          status: sync.getStatus(),
+        };
+      }
+
+      const api = {
+        /** Clean database, real services, sync wired to the simulated server. */
+        async setup(prefix) {
+          await db.destroyDatabase();
+          await auth.ensureDeviceId();
+          await seedDefaultAccounts();
+          await saveSettings({ devicePrefix: prefix });
+          sync.setAdapter(new SimAdapter(parent.simServer));
+          await sync.init();
+          return getSettings();
+        },
+        setOffline(value) {
+          net.offline = value;
+          window.dispatchEvent(new Event(value ? 'offline' : 'online'));
+        },
+        product: (productName, price) =>
+          createProduct({ name: productName, unitsPerPack: 10, salePricePerPack: rupees(price), costPerPack: rupees(price * 0.7), mrpPerPack: rupees(price * 1.1), form: 'tablet', class: 'otc', soldAs: 'strip' }),
+        receive: (productId, batchNo, packs, cost) =>
+          addBatch({ productId, batchNo, expiry: EXPIRY, packs, costPerPack: rupees(cost), mrp: rupees(cost * 1.3) }),
+        customer: (customerName) => addParty({ kind: 'customer', name: customerName, phone: '0300-1234567' }),
+        supplier: (supplierName) => addParty({ kind: 'supplier', name: supplierName }),
+        /** A sale of whole packs: paid in cash in full, or left on the customer's account (credit). */
+        async sell(productId, packs, { customer = '', credit = false } = {}) {
+          const product = await db.get('products', productId);
+          const total = product.salePricePerPack * packs;
+          return createSale({
+            customer,
+            date: DAY,
+            items: [{ productId, packs }],
+            payments: credit ? [] : [{ method: 'cash', amount: total }],
+          });
+        },
+        purchase: (supplierId, productId, batchNo, packs, cost) =>
+          createPurchase({
+            supplierId,
+            date: DAY,
+            paid: rupees(cost * packs),
+            payFrom: '1000',
+            items: [{ productId, batchNo, expiry: EXPIRY, packs, costPerPack: rupees(cost), mrp: rupees(cost * 1.3) }],
+          }),
+        receipt: (partyId, amount) => receiptVoucher({ amount: rupees(amount), partyId, date: DAY, note: 'test' }),
+        expense: (amount, note) => expenseVoucher({ amount: rupees(amount), date: DAY, note }),
+        adjust: (productId, units, reason) => adjust({ productId, units, reason, date: DAY }),
+        voidSale: (saleId) => voidSale(saleId, { reason: 'test', today: DAY }),
+        setSalePrice: (productId, price) => updateProduct(productId, { salePricePerPack: rupees(price) }),
+        /** Runs one sync now and resolves when it has finished (the engine returns null on failure). */
+        sync: () => sync.syncNow(),
+        /**
+         * Runs syncs until this device has pushed its queue and pulled what the server holds, or the timeout passes.
+         * Always runs at least one sync, so a device with nothing to send still receives.
+         */
+        async settle(timeoutMs = 15000) {
+          const started = Date.now();
+          for (;;) {
+            await sync.syncNow();
+            const pending = await db.count('outbox');
+            if (!pending && sync.getStatus().state === 'idle' && !net.offline) return true;
+            if (Date.now() - started > timeoutMs) return false;
+            await new Promise((resolve) => setTimeout(resolve, 150));
+          }
+        },
+        dump,
+        /** The same data as dump(), one entry per store, for finding where two devices differ. */
+        async dumpStores() {
+          const out = {};
+          const text = await dump();
+          for (const [store, rows] of Object.entries(JSON.parse(text))) out[store] = rows;
+          return out;
+        },
+        stats,
+        allSales: () => db.getAll('sales'),
+        allProducts: () => db.getAll('products'),
+        allCustomers: () => db.getAll('customers'),
+        publishSnapshot: (force = true) => sync.publishSnapshot({ force }),
+        status: () => sync.getStatus(),
+      };
+
+      window.api = api;
+      window.deviceReady = true;
+    </script>
+  </body>
+</html>
