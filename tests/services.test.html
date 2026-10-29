@@ -35,6 +35,8 @@
     import * as parties from '../js/services/parties.js';
     import * as settings from '../js/services/settings.js';
     import * as pos from '../js/services/pos.js';
+    import * as reports from '../js/services/reports.js';
+    import * as rollups from '../js/services/rollups.js';
     import * as trace from '../js/services/trace.js';
 
     db.useDatabase('shifa-services-test');
@@ -823,6 +825,141 @@
       eq('whole book balances with banks, wallets and vouchers', (await ledger.trialBalance()).balanced, true);
     }
 
+    /* ---------- 12. reports: pure maths ---------- */
+
+    async function reportsPureGroup() {
+      // Sale allocation: lines add up to the sale's net and profit, whatever order they come in.
+      const sale = { total: 1000, tax: 50, subtotal: 1000 };
+      const items = [{ id: 'b', amount: 600, cost: 300 }, { id: 'a', amount: 400, cost: 100 }];
+      const lines = rollups.allocateSaleLines(sale, items);
+      eq('allocation: lines in id order with rounding on the last line', lines.map((l) => [l.item.id, l.net]), [['a', 380], ['b', 570]]);
+      eq('allocation: reversed input gives the same split', rollups.allocateSaleLines(sale, [...items].reverse()).map((l) => [l.item.id, l.net]), [['a', 380], ['b', 570]]);
+      eq('allocation: lines add up to the sale profit', lines.reduce((s, l) => s + l.profit, 0), 950 - 400);
+
+      // Medicine rows: the same product on two days becomes one row.
+      const grouped = reports.groupProductRows([
+        { productId: 'p1', productName: 'A', units: 10, lines: 1, amount: 100, net: 90, cost: 50, profit: 40 },
+        { productId: 'p1', productName: 'A', units: 5, lines: 1, amount: 50, net: 45, cost: 25, profit: 20 },
+        { productId: 'p2', productName: 'B', units: 3, lines: 1, amount: 30, net: 30, cost: 10, profit: 20 },
+      ], (row) => ({ key: row.productId, label: row.productName }));
+      eq('medicine rows merge by product and sort by net', grouped.map((g) => [g.label, g.units, g.net, g.profit]), [['A', 15, 135, 60], ['B', 3, 30, 20]]);
+      eq('margin is profit over net', Math.round(grouped[0].margin * 1000), Math.round((60 / 135) * 1000));
+
+      // Profit by day and by month, with a sale return and an expense.
+      const days = [
+        { date: '2026-10-01', invoices: 2, total: 1000, tax: 50, cost: 600, profit: 350 },
+        { date: '2026-10-02', invoices: 1, total: 500, tax: 0, cost: 200, profit: 300 },
+      ];
+      const returns = [{ type: 'sale', date: '2026-10-02', net: 100, cost: 60 }];
+      const expenses = [{ date: '2026-10-01', amount: 150 }];
+      const byDay = reports.profitFromDaily({ days, returns, expenses, granularity: 'day' });
+      eq('profit by day: revenue, gross profit and net', byDay.map((r) => [r.period, r.revenue, r.grossProfit, r.netProfit]), [['2026-10-01', 950, 350, 200], ['2026-10-02', 500, 300, 260]]);
+      eq('profit by day: return reduces profit by net less cost', byDay[1].returnsProfit, -40);
+      const byMonth = reports.profitFromDaily({ days, returns, expenses, granularity: 'month' });
+      eq('profit by month adds the days up', [byMonth[0].period, byMonth[0].grossProfit, byMonth[0].netProfit], ['2026-10', 650, 460]);
+
+      // Daily closing: opening carries forward, expected and counted difference.
+      const cashRows = [
+        { date: '2026-10-01', group: 'sales', debit: 1000, credit: 0 },
+        { date: '2026-10-01', group: 'expenses', debit: 0, credit: 150 },
+        { date: '2026-10-02', group: 'receipts', debit: 200, credit: 0 },
+        { date: '2026-10-02', group: 'purchases', debit: 0, credit: 300 },
+      ];
+      const closing = reports.dailyClosingFromCash({ rows: cashRows, counted: new Map([['2026-10-02', 700]]) });
+      eq('closing: day one expected cash', closing[0].expected, 850);
+      eq('closing: day two opens with day one', [closing[1].opening, closing[1].expected], [850, 750]);
+      eq('closing: difference is counted less expected', closing[1].difference, -50);
+      eq('closing: a range starts with the right opening', reports.dailyClosingFromCash({ rows: cashRows, from: '2026-10-02' })[0].opening, 850);
+      eq('closing: no count means no difference', closing[0].difference, null);
+
+      // Stock, expiry, low stock and dead stock.
+      const stock = reports.stockByProduct([
+        { productId: 'p1', productName: 'A', units: 10, unitsPerPack: 10, batches: 1, costValue: 100, retailValue: 150, expiry: '2027-01-31' },
+        { productId: 'p1', productName: 'A', units: 20, unitsPerPack: 10, batches: 1, costValue: 200, retailValue: 300, expiry: '2026-12-31' },
+        { productId: 'p2', productName: 'B', units: 0, unitsPerPack: 10, batches: 0, costValue: 0, retailValue: 0, expiry: '2026-12-31' },
+      ]);
+      eq('stock: one row per product with stock', stock.map((s) => [s.name, s.units, s.packs, s.costValue, s.nearestExpiry]), [['A', 30, 3, 300, '2026-12-31']]);
+      const expiry = reports.expiryRows([
+        { batchId: '1', productName: 'A', batchNo: 'B1', expiry: '2026-11-30', units: 10, packs: 1, looseUnits: 0, costValue: 100, bucket: 'd30' },
+        { batchId: '2', productName: 'A', batchNo: 'B2', expiry: '2026-10-31', units: 0, packs: 0, looseUnits: 0, costValue: 0, bucket: 'd30' },
+        { batchId: '3', productName: 'C', batchNo: 'C1', expiry: '2026-12-31', units: 20, packs: 2, looseUnits: 0, costValue: 200, bucket: 'd90' },
+      ], { today: '2026-10-29' });
+      eq('expiry: batches with stock, soonest first', expiry.map((e) => [e.batchNo, e.days]), [['B1', 32], ['C1', 63]]);
+      const low = reports.lowStockRows([
+        { id: 'x', name: 'X', units: 0, unitsPerPack: 10, reorderLevel: 2, reorderQty: 10, active: true, trackStock: true },
+        { id: 'y', name: 'Y', units: 15, unitsPerPack: 10, reorderLevel: 2, active: true, trackStock: true },
+        { id: 'z', name: 'Z', units: 50, unitsPerPack: 10, reorderLevel: 2, active: true, trackStock: true },
+      ]);
+      eq('low stock: out first, suggested packs to order', low.map((r) => [r.name, r.status, r.suggested]), [['X', 'out', 10], ['Y', 'low', 1]]);
+      const dead = reports.deadStockRows({
+        products: [
+          { id: 'a', name: 'A', units: 20, unitsPerPack: 10, active: true },
+          { id: 'b', name: 'B', units: 10, unitsPerPack: 10, active: true },
+          { id: 'c', name: 'C', units: 0, unitsPerPack: 10, active: true },
+        ],
+        lastSold: new Map([['b', '2026-01-01']]),
+        costByProduct: new Map([['a', 500], ['b', 300]]),
+        today: '2026-10-29',
+        days: 90,
+      });
+      eq('dead stock: never sold or sold long ago, most money first', dead.map((d) => [d.name, d.daysSince]), [['A', null], ['B', 301]]);
+
+      // Ledger groups for the cash book and the closing.
+      eq('ledger group: sale', rollups.ledgerGroup('sale', 'SALE-0001'), 'sales');
+      eq('ledger group: legacy voucher by number', rollups.ledgerGroup('voucher', 'RCV-0001'), 'receipts');
+      eq('ledger group: void is other', rollups.ledgerGroup('void', 'SALE-0001'), 'other');
+    }
+
+    /* ---------- 13. reports: rollups agree with the source rows ---------- */
+
+    async function reportsRollupGroup() {
+      const pan = await products.createProduct({
+        name: 'Panadol 500mg', generic: 'Paracetamol', company: 'GSK', code: 'PAN500', soldAs: 'strip', unitsPerPack: 10,
+        looseSelling: true, looseUnitPrice: 450, costPerPack: 2000, salePricePerPack: 4000, mrpPerPack: 4000,
+      });
+      await stock.addBatch({ productId: pan.id, batchNo: 'R-1', expiry: monthYear(12), packs: 20, costPerPack: 2000, mrp: 4000 });
+      const cust = await parties.createCustomer({ name: 'Rollup Customer' });
+      const first = await sales.createSale({ items: [{ productId: pan.id, packs: 2 }], payments: [{ method: 'cash', amount: 8000 }] });
+      await sales.createSale({ items: [{ productId: pan.id, packs: 1 }, { productId: pan.id, looseUnits: 3 }], discount: 300, payments: [{ method: 'cash', amount: 3000 }, { method: 'bank', amount: 2050 }] });
+      await sales.createSale({ customer: cust.id, items: [{ productId: pan.id, packs: 1 }], payments: [] });
+      const voided = await sales.createSale({ items: [{ productId: pan.id, packs: 1 }], payments: [{ method: 'cash', amount: 4000 }] });
+      await sales.voidSale(voided.id, { reason: 'test' });
+      await ledger.receiptVoucher({ amount: 4000, partyId: cust.id });
+      await ledger.expenseVoucher({ amount: 500, fromCode: '1000' });
+
+      const live = (await sales.listSales({})).filter((s) => s.status !== 'void');
+      const direct = reports.dailySales(live);
+      const rollup = await reports.readDailySales({});
+      const pick = (r) => [r.date, r.invoices, r.total, r.tax, r.cost, r.profit, r.cash, r.bank, r.credit];
+      eq('rollup day row matches the sales themselves', rollup.map(pick), direct.map(pick));
+      eq('rollup has one row per sale day', rollup.length, 1);
+
+      const dayProducts = await reports.readDailyProducts({});
+      const netSum = dayProducts.reduce((s, r) => s + r.net, 0);
+      eq('product rollup nets to sales less tax', netSum, live.reduce((s, sale) => s + sale.total - sale.tax, 0));
+      eq('product rollup cost matches the sale headers', dayProducts.reduce((s, r) => s + r.cost, 0), live.reduce((s, sale) => s + sale.cost, 0));
+      eq('product rollup profit matches the sale headers', dayProducts.reduce((s, r) => s + r.profit, 0), live.reduce((s, sale) => s + sale.profit, 0));
+      eq('product rollup units count the voided sale out', dayProducts.reduce((s, r) => s + r.units, 0), 20 + 10 + 3 + 10);
+
+      const cashBalance = (await ledger.accountBalance('1000')).balance;
+      const cashRows = await reports.readCashDaily();
+      eq('cash rollup nets to the cash account', cashRows.reduce((s, r) => s + r.debit - r.credit, 0), cashBalance);
+      const closing = reports.dailyClosingFromCash({ rows: cashRows, counted: new Map() });
+      eq('daily closing expected cash equals the cash account', closing[closing.length - 1].expected, cashBalance);
+
+      const profit = reports.profitFromDaily({ days: rollup, returns: [], expenses: await ledger.listVouchers({ type: 'expense' }) });
+      eq('profit report gross equals the sales profit (dashboard figure)', profit.reduce((s, r) => s + r.grossProfit, 0), live.reduce((s, sale) => s + sale.profit, 0));
+
+      // A full rebuild gives the same numbers as the incremental updates.
+      const before = JSON.stringify((await reports.readDailySales({})).map(pick));
+      const beforeProducts = JSON.stringify((await reports.readDailyProducts({})).map((r) => [r.key, r.units, r.net, r.cost, r.profit]).sort());
+      await rollups.rebuildRollups();
+      eq('rebuild reproduces the day rows', JSON.stringify((await reports.readDailySales({})).map(pick)), before);
+      eq('rebuild reproduces the product rows', JSON.stringify((await reports.readDailyProducts({})).map((r) => [r.key, r.units, r.net, r.cost, r.profit]).sort()), beforeProducts);
+      eq('rebuild reproduces the cash rows', (await reports.readCashDaily()).reduce((s, r) => s + r.debit - r.credit, 0), cashBalance);
+      eq('whole book balances after the report cycle', (await ledger.trialBalance()).balanced, true);
+    }
+
     /* ---------- runner ---------- */
 
     const groups = [
@@ -837,6 +974,8 @@
       ['sale screen', posGroup],
       ['documents and trace', documentsGroup],
       ['parties, cash book and accounts', partiesGroup],
+      ['reports: pure maths', reportsPureGroup],
+      ['reports: rollups agree with the sales', reportsRollupGroup],
     ];
 
     const list = document.getElementById('results');

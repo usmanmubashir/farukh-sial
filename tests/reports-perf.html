@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reports performance</title>
+  <link rel="stylesheet" href="../css/tokens.css">
+  <link rel="stylesheet" href="../css/base.css">
+  <link rel="stylesheet" href="../css/components.css">
+  <style>
+    body { padding: 1rem; font-family: system-ui, sans-serif; }
+    pre { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Reports on 50,000 sales</h1>
+    <p id="status">Starting…</p>
+    <pre id="timings"></pre>
+  </main>
+
+  <script type="module">
+    // Seeds a scratch database with 50,000 sales (two lines each), then times every report's loader.
+    // Runs against its own database, so the app's data is never touched.
+    import * as db from '../js/core/db.js';
+    import { todayISO, addDays } from '../js/core/dates.js';
+    import { OPEN_END } from '../js/services/reports.js';
+    import * as products from '../js/services/products.js';
+    import * as stock from '../js/services/stock.js';
+    import { GROUPS, REPORTS } from '../js/pages/_report-defs.js';
+    import { rebuildRollups } from '../js/services/rollups.js';
+
+    db.useDatabase('shifa-reports-perf');
+
+    const SALES = Number(new URLSearchParams(location.search).get('sales') ?? 50000);
+    const BATCH = 500;
+    const status = document.getElementById('status');
+    const out = document.getElementById('timings');
+    const log = (line) => {
+      out.textContent += `${line}\n`;
+    };
+
+    async function seed() {
+      // ?reuse=1 keeps the sales already seeded, so the timings can be repeated quickly.
+      if (new URLSearchParams(location.search).get('reuse') === '1' && (await db.count('sales')) > 0) {
+        status.textContent = 'Reusing the seeded sales.';
+        return;
+      }
+      await db.destroyDatabase();
+      const today = todayISO();
+      const made = [];
+      for (let i = 0; i < 60; i += 1) {
+        const product = await products.createProduct({
+          name: `Medicine ${String(i).padStart(2, '0')}`, generic: `Salt ${i % 12}`, company: `Company ${i % 7}`,
+          code: `M${i}`, soldAs: 'strip', unitsPerPack: 10, looseSelling: true, looseUnitPrice: 50,
+          costPerPack: 1000 + i * 10, salePricePerPack: 1500 + i * 15, mrpPerPack: 1500 + i * 15,
+        });
+        await stock.addBatch({ productId: product.id, batchNo: `B${i}`, expiry: addDays(today, 400), packs: 100000, costPerPack: 1000 + i * 10, mrp: 1500 + i * 15 });
+        made.push(product);
+      }
+      status.textContent = `Seeding ${SALES} sales…`;
+      for (let start = 0; start < SALES; start += BATCH) {
+        const end = Math.min(SALES, start + BATCH);
+        await db.transaction((ctx) => {
+          for (let i = start; i < end; i += 1) {
+            const daysAgo = i % 365;
+            const date = addDays(today, -daysAgo);
+            const lines = [made[i % 60], made[(i * 7 + 3) % 60]];
+            const itemRows = lines.map((product, k) => {
+              const packs = 1 + ((i + k) % 3);
+              const amount = packs * product.salePricePerPack;
+              const cost = packs * product.costPerPack;
+              return { product, packs, amount, cost };
+            });
+            const subtotal = itemRows.reduce((s, r) => s + r.amount, 0);
+            const cost = itemRows.reduce((s, r) => s + r.cost, 0);
+            const saleId = db.newId();
+            ctx.put('sales', {
+              id: saleId, number: `SALE-${String(i + 1).padStart(6, '0')}`, date, customerId: null,
+              subtotal, discount: 0, tax: 0, total: subtotal, paid: subtotal, paidCash: subtotal, paidBank: 0,
+              tendered: subtotal, change: 0, balance: 0, cost, profit: subtotal - cost, payments: [{ method: 'cash', accountCode: '1000', amount: subtotal }],
+              patient: '', doctor: '', note: '', status: 'completed', returnedTotal: 0,
+            });
+            for (const row of itemRows) {
+              ctx.put('saleItems', {
+                id: db.newId(), saleId, productId: row.product.id, productName: row.product.name, strength: '', class: 'otc',
+                packs: row.packs, looseUnits: 0, units: row.packs * 10, unitPricePack: row.product.salePricePerPack, unitPriceLoose: 0,
+                lineDiscount: 0, amount: row.amount, cost: row.cost, allocations: [], returnedUnits: 0, returnedAmount: 0,
+              });
+            }
+          }
+        });
+        if (start % 10000 === 0) status.textContent = `Seeded ${end} of ${SALES} sales…`;
+      }
+      status.textContent = `Seeded ${SALES} sales. Timing reports…`;
+    }
+
+    async function time() {
+      const ctx = { from: '', to: OPEN_END, today: todayISO(), party: '', account: '1000', by: 'day', days: 90 };
+      const results = [];
+      for (const group of GROUPS) {
+        for (const key of group.reports) {
+          const def = REPORTS[key];
+          const started = performance.now();
+          const result = await def.load(ctx);
+          const ms = performance.now() - started;
+          results.push({ key, rows: result.rows.length, ms: Math.round(ms) });
+          log(`${key.padEnd(18)} ${String(result.rows.length).padStart(7)} rows  ${String(Math.round(ms)).padStart(6)} ms`);
+        }
+      }
+      return results;
+    }
+
+    try {
+      const seedStart = performance.now();
+      await seed();
+      log(`seed: ${Math.round((performance.now() - seedStart) / 1000)} s`);
+      const rebuildStart = performance.now();
+      const built = await rebuildRollups();
+      log(`rollup rebuild: ${Math.round(performance.now() - rebuildStart)} ms (${JSON.stringify(built)})`);
+      const results = await time();
+      const worst = Math.max(...results.map((r) => r.ms));
+      status.textContent = `Done. Slowest report: ${worst} ms.`;
+      window.__reportsPerf = { sales: SALES, results, worst };
+    } catch (err) {
+      status.textContent = `Failed: ${err.message}`;
+      console.error(err);
+      window.__reportsPerf = { error: String(err?.stack ?? err) };
+    }
+  </script>
+</body>
+</html>

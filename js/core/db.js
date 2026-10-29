@@ -13,12 +13,15 @@ export const SYNCED_STORES = [
 ];
 
 /** Device-local stores. Never synced: passwords (users) and sessions stay on this device. */
-export const LOCAL_STORES = ['settings', 'counters', 'outbox', 'syncState', 'users'];
+export const LOCAL_STORES = ['settings', 'counters', 'outbox', 'syncState', 'users', 'dailySales', 'dailyProducts', 'dailyLedger'];
 
 const ALL_STORES = [...SYNCED_STORES, ...LOCAL_STORES];
 
 /** Primary key field per store. Everything else uses "id". */
-const KEY_FIELD = { settings: 'key', counters: 'key', syncState: 'key', outbox: 'seq' };
+const KEY_FIELD = {
+  settings: 'key', counters: 'key', syncState: 'key', outbox: 'seq',
+  dailySales: 'date', dailyProducts: 'key', dailyLedger: 'key',
+};
 
 /**
  * Schema migrations. migrations[n] upgrades the database from version n to n + 1.
@@ -111,6 +114,15 @@ const migrations = [
     rx.createIndex('date', 'date');
     rx.createIndex('productId', 'productId');
   },
+  // v3: daily rollups for reports (local, derived, rebuilt from the source rows when missing).
+  // dailySales: one row per day. dailyProducts: one row per day and medicine. dailyLedger: cash account per day and kind.
+  (db) => {
+    db.createObjectStore('dailySales', { keyPath: 'date' });
+    const products = db.createObjectStore('dailyProducts', { keyPath: 'key' });
+    products.createIndex('date', 'date');
+    const ledger = db.createObjectStore('dailyLedger', { keyPath: 'key' });
+    ledger.createIndex('account', 'accountCode');
+  },
 ];
 
 export const DB_VERSION = migrations.length;
@@ -121,6 +133,17 @@ let dbPromise = null;
 export function useDatabase(name) {
   if (dbPromise) throw new Error('useDatabase() must run before the database is opened');
   dbName = name;
+}
+
+/** Empties the named stores in one transaction. Used to rebuild derived data (the report rollups). */
+export async function clearStores(names) {
+  const db = await open();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(names, 'readwrite');
+    for (const name of names) tx.objectStore(name).clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
 }
 
 /** Closes the connection and deletes the database. Test hook for clean runs. */
@@ -194,6 +217,30 @@ export async function getAll(store, options) {
   return request(readAll(db.transaction(store, 'readonly').objectStore(store), options));
 }
 
+/**
+ * Streams rows through a cursor, calling fn(row) for each one in key order. Memory stays small on big stores.
+ * fn must be synchronous: the read transaction closes as soon as the cursor is waiting for a callback to finish.
+ * Use it for reports over tens of thousands of rows, with the index and key range doing the filtering.
+ */
+export async function each(store, { index, query, direction = 'next' } = {}, fn) {
+  const db = await open();
+  const source = db.transaction(store, 'readonly').objectStore(store);
+  const cursorSource = index ? source.index(index) : source;
+  return new Promise((resolve, reject) => {
+    const req = cursorSource.openCursor(query ?? null, direction);
+    req.onsuccess = () => {
+      const cursor = req.result;
+      if (!cursor) {
+        resolve();
+        return;
+      }
+      fn(cursor.value);
+      cursor.continue();
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
 export async function count(store, { index, query } = {}) {
   const db = await open();
   const objectStore = db.transaction(store, 'readonly').objectStore(store);
@@ -230,6 +277,11 @@ function createContext(tx) {
     touched.add(store);
     if (SYNCED_STORES.includes(store)) enqueue(tx, { store, op: 'put', key: row.id, record: row });
     return row;
+  };
+
+  ctx.clear = (store) => {
+    tx.objectStore(store).clear();
+    touched.add(store);
   };
 
   ctx.remove = (store, key) => {

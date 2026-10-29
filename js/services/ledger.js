@@ -13,6 +13,7 @@ import { t } from '../core/i18n.js';
 import { todayISO } from '../core/dates.js';
 import { ServiceError, missing, requireInt, requireOneOf, requireText } from './errors.js';
 import { nextDocNumber } from './numbering.js';
+import { applyCashLine, ledgerGroup } from './rollups.js';
 
 export const ACCOUNT = {
   cash: '1000',
@@ -214,8 +215,8 @@ export async function postEntryIn(ctx, { date = todayISO(), docType, docId = nul
   }
 
   const entryId = db.newId();
-  nonZero.forEach((line, i) => {
-    ctx.put('ledgerEntries', {
+  for (const [i, line] of nonZero.entries()) {
+    const row = ctx.put('ledgerEntries', {
       id: db.newId(),
       entryId,
       date,
@@ -228,7 +229,8 @@ export async function postEntryIn(ctx, { date = todayISO(), docType, docId = nul
       credit: line.credit,
       memo: line.memo || memo,
     });
-  });
+    await applyCashLine(ctx, { accountCode: row.accountCode, date, group: ledgerGroup(docType, row.memo), debit: row.debit, credit: row.credit });
+  }
   return entryId;
 }
 

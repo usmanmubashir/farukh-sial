@@ -47,6 +47,7 @@ const ROUTES = [
   { path: '/vouchers', nav: 'accounts', label: 'nav.cashBook', icon: 'bank', load: page('vouchers') },
   { path: '/accounts', nav: 'accounts', label: 'nav.ledger', icon: 'ledger', load: page('accounts') },
   { path: '/accounts/:code', load: page('accounts') },
+  { path: '/reports/:key', load: page('reports') },
   { path: '/reports', nav: 'accounts', icon: 'reports', load: page('reports') },
 
   { path: '/backup', nav: 'admin', label: 'nav.backup', icon: 'backup', load: page('backup') },

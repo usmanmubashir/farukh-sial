@@ -1,11 +1,12 @@
 # Data model
 
-Local database: IndexedDB `shifa-pos`, schema version **2** (see `js/core/db.js`, `migrations`).
+Local database: IndexedDB `shifa-pos`, schema version **3** (see `js/core/db.js`, `migrations`).
 
 | Version | Change |
 |---|---|
 | 1 | Base schema: products, batches, stock movements, parties, sales, purchases, returns, ledger, vouchers, demand list, settings, counters, outbox, users |
 | 2 | Adds `rxRegister` (one row per Rx or controlled line sold, for the Rx register) |
+| 3 | Adds the daily rollups for reports: `dailySales`, `dailyProducts`, `dailyLedger` (local, derived; see the rollups note below the store list) |
 Every write goes through `db.transaction()`, which also queues synced rows in `outbox` in the same transaction.
 
 ## Conventions
@@ -44,10 +45,15 @@ Every write goes through `db.transaction()`, which also queues synced rows in `o
 | settings | key | — | no | `{ key, value }`. Keys: `pharmacyName`, `deviceId`, `session`, `business` (business rules), `heldCarts` (parked carts). Business rules that the sale screen reads: `rxRequiresPatientDoctor` (true), `voidSameDayOnly` (true), `allowPriceEdit` (true), `receiptWidth` (80 or 58 mm), `receiptShowBatch` (false), `receiptShowDirections` (true), `devicePrefix`, `productGroups`. Document prefixes (`docPrefixes`): SALE, PUR, SRN, PRN, RCV, PAY, EXP, INC, TRF, ADJ |
 | counters | key | — | no | `{ key, value }`. Last issued number per sequence |
 | syncState | key | — | no | Sync cursor and adapter state |
+| dailySales | date | — | no | Rollup, one row per day: `invoices`, `subtotal`, `discount`, `tax`, `total`, `cost`, `profit`, `cash`, `bank`, `credit`. Live sales only |
+| dailyProducts | key (`date\|productId`) | date | no | Rollup, one row per day and medicine: `units`, `lines`, `amount`, `net` (net of tax, allocated per line), `cost`, `profit` |
+| dailyLedger | key (`accountCode\|date\|group`) | accountCode | no | Rollup of the cash account (1000) per day and kind of movement: `debit`, `credit` |
 | outbox | seq (auto) | status | no | `{ store, op: 'put' \| 'delete', key, record?, status, createdAt, attempts }` |
 | users | id | username (unique) | no | Owner account: `{ id: 'owner', username, salt, hash, iterations }` |
 
 Every synced row also carries `updatedAt` (ISO timestamp), added automatically by `ctx.put`.
+
+**Rollups.** The three rollup stores are derived data. Every sale, void and cash posting updates them in the same transaction as the business write (`services/rollups.js`), so they cannot drift from the sales. `rebuildRollups()` recomputes them from the source rows in one transaction. The first report run builds them when the `settings` row `rollups` is missing (once per database). They are device-local and never synced.
 
 ## Seeded data (first boot, idempotent)
 

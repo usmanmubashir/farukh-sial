@@ -1993,3 +1993,253 @@
     width: 100%;
   }
 }
+
+/* ---------- Reports: card grid, virtual table, totals row and chart ---------- */
+
+.rpt-group {
+  display: grid;
+  gap: var(--space-3);
+  margin-block-start: var(--space-5);
+}
+
+.rpt-group-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--fs-base);
+  font-weight: 600;
+}
+
+.rpt-group-title .icon {
+  width: 1.1em;
+  height: 1.1em;
+}
+
+.rpt-cards {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+}
+
+.rpt-card {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  color: var(--c-text);
+  text-decoration: none;
+  min-width: 0;
+}
+
+.rpt-card-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-md);
+  background: var(--c-brand-soft);
+  color: var(--c-brand-strong);
+}
+
+.rpt-card-icon .icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.rpt-card-title {
+  font-weight: 600;
+}
+
+.rpt-card-desc {
+  line-height: 1.4;
+}
+
+.rpt-filters {
+  align-items: flex-end;
+}
+
+.rpt-pick {
+  min-width: 12rem;
+}
+
+.rpt-pick select,
+.rpt-pick input {
+  min-height: var(--touch);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-md);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font: inherit;
+}
+
+.rpt-table {
+  min-width: 0;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  background: var(--c-surface);
+}
+
+/* The pinned block (headers and totals) sticks to the top of the scroll box and scrolls sideways with the rows. */
+.vlist-pinned {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  min-width: max-content;
+}
+
+/* One row layout shared by the header, the totals and the virtual rows. Columns come from --rpt-cols. */
+.rpt-head,
+.rpt-totals,
+.rpt-row {
+  display: grid;
+  grid-template-columns: var(--rpt-cols);
+  align-items: center;
+  min-width: max-content;
+  height: 40px;
+}
+
+.rpt-head {
+  background: var(--c-surface-muted);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--c-text-muted);
+}
+
+.rpt-totals {
+  background: var(--c-brand-soft);
+  font-weight: 600;
+  border-block-end: 1px solid var(--c-border);
+}
+
+.rpt-cell {
+  padding: 0 var(--space-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rpt-cell.rpt-int,
+.rpt-cell.rpt-money,
+.rpt-cell.rpt-pct,
+.rpt-cell.rpt-input {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.rpt-th {
+  text-align: start;
+}
+
+.rpt-th.rpt-int,
+.rpt-th.rpt-money,
+.rpt-th.rpt-pct,
+.rpt-th.rpt-input {
+  text-align: end;
+}
+
+.rpt-row {
+  border-block-end: 1px solid var(--c-border);
+}
+
+.rpt-row:nth-child(even) {
+  background: color-mix(in srgb, var(--c-surface-muted) 50%, transparent);
+}
+
+.rpt-count {
+  width: 8.5rem;
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font: inherit;
+  text-align: end;
+}
+
+.rpt-none {
+  padding: var(--space-6);
+  text-align: center;
+}
+
+.rpt-count-line {
+  margin-block: var(--space-2);
+}
+
+.rpt-chart {
+  margin-block: var(--space-3);
+  min-height: 0;
+}
+
+.rpt-chart:empty {
+  display: none;
+}
+
+.chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 200px;
+  overflow: visible;
+}
+
+.chart-base {
+  stroke: var(--c-border-strong);
+  stroke-width: 1;
+}
+
+.chart-bar {
+  fill: var(--c-brand);
+  transform: scaleY(0);
+  transform-box: fill-box;
+  transform-origin: bottom;
+  transition: transform 700ms var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) var(--delay, 0ms);
+}
+
+.chart-bar.is-in {
+  transform: scaleY(1);
+}
+
+.chart-bar.is-negative {
+  fill: var(--c-danger);
+}
+
+.chart-label {
+  fill: var(--c-text-muted);
+  font-size: 11px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chart-bar {
+    transition: none;
+    transform: none;
+  }
+}
+
+/* Virtual list: a scroll box, a tall spacer for the scrollbar, and the visible rows in a window moved by translateY. */
+.vlist {
+  position: relative;
+  overflow: auto;
+  max-height: min(60vh, 560px);
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.vlist-space {
+  position: relative;
+  min-height: 0;
+}
+
+.vlist-window {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 100%;
+  min-width: max-content;
+}
+
+@media (max-width: 1023px) {
+  .rpt-cards {
+    grid-template-columns: 1fr;
+  }
+}

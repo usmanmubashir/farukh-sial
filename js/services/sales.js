@@ -17,6 +17,7 @@ import { allocateFEFOIn, applyMovementIn, costOfUnits } from './stock.js';
 import { ACCOUNT, postEntryIn, requirePaymentAccount, reversalLines, saleLines } from './ledger.js';
 import { nextDocNumber } from './numbering.js';
 import { readSettingsIn } from './settings.js';
+import { applySale } from './rollups.js';
 
 export const PAYMENT_METHODS = ['cash', 'card', 'bank', 'mobile'];
 const DETAILS_REQUIRED_CLASSES = ['rx', 'controlled'];
@@ -187,6 +188,7 @@ export async function createSaleIn(ctx, input) {
     returnedTotal: 0,
   });
   for (const item of saleItems) ctx.put('saleItems', item);
+  await applySale(ctx, sale, saleItems, 1);
 
   for (const item of saleItems.filter((i) => ['rx', 'controlled'].includes(i.class))) {
     ctx.put('rxRegister', {
@@ -259,6 +261,7 @@ export function voidSale(saleId, { reason = '', today = todayISO() } = {}) {
       memo: sale.number,
       lines: reversalLines(original),
     });
+    await applySale(ctx, sale, items, -1);
     return ctx.put('sales', { ...sale, status: 'void', voidReason: String(reason).trim(), voidedOn: today });
   });
 }
