@@ -6,7 +6,7 @@ compatibility_date = "2026-01-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "shifa-sync"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "b562a933-9cab-45b0-b443-ecaa29c4b614"
 
 [vars]
 # The origin of the app (GitHub Pages address), without a trailing slash. Several origins can be comma separated.
