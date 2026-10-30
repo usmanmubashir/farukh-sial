@@ -6,11 +6,13 @@ import { debounce } from '../core/resilience.js';
 import * as ui from '../core/ui.js';
 import { esc, icon, money } from '../core/ui.js';
 import { t } from '../core/i18n.js';
-import { formatDate, todayISO } from '../core/dates.js';
+import { formatDate, periodRange, todayISO } from '../core/dates.js';
 import { parseRupees } from '../core/money.js';
 import { downloadText, rupeesForCsv, toCsv } from '../core/csv.js';
 import { virtualList } from '../core/virtual.js';
 import { barChart, animateBars } from '../core/chart.js';
+import { hbarChart, lineChart, stackedBars } from '../core/trend.js';
+import { openPracticeDetail } from './_practice-detail.js';
 import * as db from '../core/db.js';
 import { printPage } from '../services/printing.js';
 import { listCustomers, listSuppliers } from '../services/parties.js';
@@ -28,20 +30,23 @@ const PRINT_CHUNK = 2000;
 let $host = null;
 let unsubscribe = null;
 let key = null;
-let state = { period: 'month', from: '', to: '', search: '', party: '', account: '1000', by: 'day', days: 90 };
-let loaded = { rows: [], text: [], needs: '' };
+let state = { period: 'month', from: '', to: '', search: '', party: '', account: '1000', by: 'day', days: 90, showVoided: false, source: 'both', rank: 'qty', topN: '20' };
+// The period and filters each report was last left with, so coming back to it finds the same view.
+const remembered = new Map();
+let loaded = { rows: [], text: [], needs: '', totals: null, kpis: null, trend: null };
 let visible = [];
 let list = null;
 let runId = 0;
 let choices = { parties: [], accounts: [] };
 
-const GROUP_ICON = { inventory: 'stock', sales: 'receipt', purchases: 'purchase', parties: 'customers', accounts: 'bank' };
+const GROUP_ICON = { inventory: 'stock', sales: 'receipt', purchases: 'purchase', parties: 'customers', accounts: 'bank', practice: 'pulse' };
 const REPORT_ICON = {
   stock: 'stock', batches: 'batch', expiry: 'clock', lowstock: 'order', dead: 'stock',
   daily: 'receipt', range: 'receipt', returns: 'returns', medicine: 'products', company: 'products', salt: 'products',
   purchases: 'purchase', purchaseReturns: 'returns', purchaseMedicine: 'products', supplier: 'suppliers',
   customerLedger: 'customers', supplierLedger: 'suppliers', receivables: 'customers', payables: 'suppliers',
   cashBook: 'bank', accountLedger: 'ledger', dailyClosing: 'bank', profit: 'reports',
+  practice: 'pulse', 'practice-medicine': 'products', 'top-products': 'reports', 'slow-movers': 'clock', 'sales-vs-practice': 'bank',
 };
 
 /* ---------- Grid ---------- */
@@ -83,14 +88,24 @@ function cellHtml(col, row) {
     case 'pct': return esc(`${((v ?? 0) * 100).toFixed(1)}%`);
     case 'input':
       return `<input class="rpt-count" type="text" inputmode="decimal" data-date="${esc(row.date)}" value="${esc(rupeesInput(v))}" aria-label="${esc(t('rpt.col.counted'))} ${esc(formatDate(row.date))}">`;
+    case 'rank': {
+      const rank = Number(v ?? 0);
+      return rank >= 1 && rank <= 3 ? `<span class="rank-badge rank-badge--${rank}" aria-label="${esc(t('rpt.rank.place', { rank }))}">${rank}</span>` : esc(String(rank));
+    }
     default: return esc(v ?? '');
   }
 }
 
 function rowHtml(def, row) {
-  return `<div class="rpt-row" role="row">${def.columns
-    .map((col) => `<span class="rpt-cell rpt-${col.type}" role="cell">${cellHtml(col, row)}</span>`)
-    .join('')}</div>`;
+  // A row that opens a detail (a practice) is focusable and carries its id. A voided row is struck through.
+  const link = def.rowDetail && row.id ? ` rpt-row-link" tabindex="0" data-row-id="${esc(row.id)}` : '';
+  const voided = row.voided ? ' is-voided' : '';
+  const cells = def.columns.map((col) => {
+    const v = row[col.key];
+    const loss = col.type === 'money' && typeof v === 'number' && v < 0 ? ' is-loss' : '';
+    return `<span class="rpt-cell rpt-${col.type}${loss}" role="cell">${cellHtml(col, row)}</span>`;
+  });
+  return `<div class="rpt-row${voided}${link}" role="row">${cells.join('')}</div>`;
 }
 
 function colsStyle(def) {
@@ -101,10 +116,11 @@ function headHtml(def) {
   return `<div class="rpt-head" role="row">${def.columns.map((c) => `<span class="rpt-cell rpt-${c.type} rpt-th" role="columnheader">${esc(t(c.label))}</span>`).join('')}</div>`;
 }
 
-function totalsHtml(def, rows) {
+function totalsHtml(def, rows, override = null) {
   const cells = def.columns.map((col) => {
     if (!col.sum) return '';
-    const total = rows.reduce((sum, row) => sum + (row[col.key] ?? 0), 0);
+    // A report can give its own totals (for example, practice totals leave voided practices out).
+    const total = override && col.key in override ? override[col.key] : rows.reduce((sum, row) => sum + (row[col.key] ?? 0), 0);
     return col.type === 'money' ? money(total) : esc(String(total));
   });
   return `<div class="rpt-totals" role="row" aria-label="${esc(t('rpt.totals'))}">${cells.map((cell, i) => `<span class="rpt-cell rpt-${def.columns[i].type}" role="cell">${cell}</span>`).join('')}</div>`;
@@ -138,25 +154,60 @@ function paint() {
   visible = applySearch(def);
   const count = visible.length;
   $host.find('.rpt-count-line').text(t('rpt.count', { count }));
-  list?.pin(headHtml(def) + totalsHtml(def, visible));
+  list?.pin(headHtml(def) + totalsHtml(def, visible, loaded.totals));
+  $host.find('.rpt-totals-bottom').html(def.bottomTotals && count > 0 ? totalsHtml(def, visible, loaded.totals) : '');
+  $host.find('.rpt-kpis').html(kpisHtml(loaded.kpis));
   $host.find('.rpt-none').prop('hidden', count > 0);
   $host.find('.rpt-none').text(loaded.needs ? t(loaded.needs) : t('rpt.none'));
-  $host.find('.rpt-chart').html(def.chart && count > 0 ? barChart(
-    visible.map((row) => ({ label: labelOf(row), value: row[def.chart.key] ?? 0, title: money_(row[def.chart.key] ?? 0) })),
-    { ariaLabel: t(def.chart.label), format: money_ },
-  ) : '');
-  animateBars($host.find('.rpt-chart'));
+  if (loaded.trend) {
+    $host.find('.rpt-chart').html(trendHtml(loaded.trend));
+  } else {
+    $host.find('.rpt-chart').html(def.chart && count > 0 ? barChart(
+      visible.map((row) => ({ label: labelOf(row), value: row[def.chart.key] ?? 0, title: money_(row[def.chart.key] ?? 0) })),
+      { ariaLabel: t(def.chart.label), format: money_ },
+    ) : '');
+    animateBars($host.find('.rpt-chart'));
+  }
+  $host.find('.rpt-loading').prop('hidden', true);
   list?.set(visible);
 }
 
 const money_ = (paisa) => new Intl.NumberFormat('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(paisa / 100);
 
+function remember() {
+  remembered.set(key, {
+    period: state.period, from: state.from, to: state.to,
+    showVoided: state.showVoided, source: state.source, rank: state.rank, topN: state.topN,
+  });
+}
+
 async function refresh() {
   const def = REPORTS[key];
   const run = (runId += 1);
+  remember();
+  if (def.period && state.period === 'custom' && state.from && state.to && state.from > state.to) {
+    $host.find('.rpt-count-line').text(t('rpt.badRange'));
+    $host.find('.rpt-none').prop('hidden', true);
+    $host.find('.rpt-loading').prop('hidden', true);
+    return;
+  }
   $host.find('.rpt-count-line').text(t('rpt.loading'));
-  const range = def.period ? shared.rangeOf(state) : { from: '', to: OPEN_END };
-  const ctx = { ...range, today: todayISO(), party: state.party, account: state.account, by: state.by, days: Number(state.days) || 90 };
+  $host.find('.rpt-loading').prop('hidden', false);
+  const range = !def.period
+    ? { from: '', to: OPEN_END }
+    : def.periods === 'full' ? periodRange(state.period, { today: todayISO(), from: state.from, to: state.to }) : shared.rangeOf(state);
+  const ctx = {
+    ...range,
+    today: todayISO(),
+    party: state.party,
+    account: state.account,
+    by: state.by,
+    days: Number(state.days) || 90,
+    showVoided: state.showVoided,
+    source: state.source,
+    rank: state.rank,
+    topN: state.topN === 'all' ? 0 : Number(state.topN) || 20,
+  };
   let result;
   try {
     if (!(await rollupsReady())) {
@@ -169,21 +220,83 @@ async function refresh() {
     console.error('[reports] failed', err);
     if (run !== runId) return;
     $host.find('.rpt-count-line').text(t('errors.generic'));
+    $host.find('.rpt-loading').prop('hidden', true);
     return;
   }
   if (run !== runId) return;
-  loaded = { rows: result.rows, text: result.text ?? [], needs: result.needs ?? '' };
+  loaded = {
+    rows: result.rows,
+    text: result.text ?? [],
+    needs: result.needs ?? '',
+    totals: result.totals ?? null,
+    kpis: result.kpis ?? null,
+    trend: result.trend ?? null,
+  };
   paint();
 }
 
 /* ---------- Report page ---------- */
 
+// Option chips for the practice reports: which sources to count, what to rank by, and how many to show.
+const OPTIONS = { source: ['both', 'sales', 'practice'], rank: ['qty', 'revenue', 'profit'], topn: ['10', '20', '50', 'all'] };
+const OPTION_STATE = { source: 'source', rank: 'rank', topn: 'topN' };
+function optChips(name) {
+  const stateKey = OPTION_STATE[name];
+  return `<div class="chip-row" role="group" aria-label="${esc(t(`rpt.${name}.label`))}">${OPTIONS[name]
+    .map((value) => `<button type="button" class="chip" data-opt-set="${stateKey}" data-val="${esc(value)}" aria-pressed="${String(state[stateKey]) === value}">${esc(t(`rpt.${name}.${value}`))}</button>`)
+    .join('')}</div>`;
+}
+
+/** Links between the reports that share a page: top sellers and slow movers. */
+function tabsHtml(extra) {
+  const keys = extra.split(':')[1].split('|');
+  return `<div class="chip-row" role="group" aria-label="${esc(t('rpt.tabs'))}">${keys
+    .map((k) => `<a class="chip" href="#/reports/${esc(k)}" aria-current="${k === key ? 'page' : 'false'}">${esc(t(`rpt.${k}.title`))}</a>`)
+    .join('')}</div>`;
+}
+
+/** Summary tiles above a report: money, counts, margins and text (the best and worst practice, the top seller). */
+function kpisHtml(kpis) {
+  if (!kpis || kpis.length === 0) return '';
+  return `<div class="rpt-kpi-grid">${kpis
+    .map((k) => `<div class="card stat"><span class="stat-label">${esc(k.label)}</span><span class="stat-value${k.tone ? ` is-${k.tone}` : ''}">${kpiValue(k)}</span></div>`)
+    .join('')}</div>`;
+}
+
+function kpiValue(k) {
+  if (k.value === null || k.value === undefined) return '—';
+  if (k.type === 'money') return money(k.value);
+  if (k.type === 'pct') return esc(`${(k.value * 100).toFixed(1)}%`);
+  return esc(String(k.value));
+}
+
+/** The chart a report asks for: lines, stacked columns, or ranked bars. */
+function trendHtml(trend) {
+  const fmt = trend.format === 'int' ? (v) => String(v) : money_;
+  if (trend.kind === 'line') return lineChart({ labels: trend.labels, series: trend.series, format: fmt, ariaLabel: trend.ariaLabel ?? t('rpt.trend') });
+  if (trend.kind === 'stacked') return stackedBars({ periods: trend.periods, format: fmt, ariaLabel: trend.ariaLabel ?? '' });
+  if (trend.kind === 'hbars') return hbarChart(trend.rows, { format: fmt, ariaLabel: trend.ariaLabel ?? '' });
+  return '';
+}
+
 function filtersHtml(def) {
   const extras = def.extras ?? [];
   const parts = [];
-  if (def.period) parts.push(shared.periodBar(state));
+  if (def.period) parts.push(def.periods === 'full' ? shared.periodBarFull(state) : shared.periodBar(state));
   if (def.search) parts.push(shared.searchField(t('rpt.search'), 'rpt-search'));
   for (const extra of extras) {
+    if (extra === 'voided') {
+      parts.push(`<label class="pl-check rpt-check"><input type="checkbox" data-opt="showVoided"${state.showVoided ? ' checked' : ''}> <span>${esc(t('rpt.showVoided'))}</span></label>`);
+      continue;
+    }
+    if (extra === 'source' || extra === 'rank' || extra === 'topn') {
+      parts.push(optChips(extra));
+      continue;
+    }
+    if (extra.startsWith('tabs:')) {
+      parts.push(tabsHtml(extra));
+      continue;
+    }
     if (extra.startsWith('party:')) {
       const kind = extra.split(':')[1];
       const options = choices.parties.filter((p) => p.kind === kind)
@@ -214,8 +327,11 @@ function pageHtml(def) {
     <p class="muted small">${esc(t(`rpt.${key}.desc`))}${def.periodHint ? ` · ${esc(t(def.periodHint))}` : ''}</p>
     <div class="doc-filters rpt-filters">${filtersHtml(def)}</div>
     <p class="muted small rpt-count-line"></p>
+    <div class="rpt-kpis"></div>
+    <div class="rpt-loading skeleton-stack" aria-hidden="true"><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div></div>
     <div class="rpt-chart"></div>
     <div class="rpt-table" style="${colsStyle(def)}" aria-label="${esc(t(`rpt.${key}.title`))}"></div>
+    <div class="rpt-totals-bottom"></div>
     <p class="muted rpt-none" hidden></p>`;
 }
 
@@ -226,7 +342,13 @@ async function openReport(reportKey) {
     $host.html(`<section class="card empty-state"><h2>${esc(t('rpt.notFound'))}</h2><a class="btn btn-primary" href="#/reports">${esc(t('rpt.back'))}</a></section>`);
     return;
   }
-  state = { ...state, search: '', period: def.defaultPeriod ?? 'month', from: '', to: '' };
+  // Practice options are per report: start from the defaults, then restore what this report was last left with.
+  state = {
+    ...state,
+    search: '', period: def.defaultPeriod ?? 'month', from: '', to: '',
+    showVoided: false, source: 'both', rank: 'qty', topN: '20',
+    ...(remembered.get(reportKey) ?? {}),
+  };
   if ((def.extras ?? []).some((e) => e.startsWith('party:'))) {
     const [customers, suppliers] = await Promise.all([listCustomers(), listSuppliers()]);
     choices.parties = [...customers.map((c) => ({ ...c, kind: 'customer' })), ...suppliers.map((s) => ({ ...s, kind: 'supplier' }))];
@@ -316,6 +438,22 @@ function bind() {
     $host.find('[data-period]').attr('aria-pressed', 'false');
     Object.assign(state, shared.readPeriod($host), { period: 'custom' });
     refresh();
+  });
+  // Practice options: a chip sets its value; the checkbox shows or hides voided practices.
+  $host.on('click', '[data-opt-set]', (event) => {
+    state[event.currentTarget.getAttribute('data-opt-set')] = event.currentTarget.getAttribute('data-val');
+    refresh();
+  });
+  $host.on('change', '[data-opt="showVoided"]', (event) => {
+    state.showVoided = event.currentTarget.checked;
+    refresh();
+  });
+  $host.on('click', '.rpt-row-link', (event) => openPracticeDetail(event.currentTarget.getAttribute('data-row-id'), { onChanged: refresh }));
+  $host.on('keydown', '.rpt-row-link', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      openPracticeDetail(event.currentTarget.getAttribute('data-row-id'), { onChanged: refresh });
+    }
   });
   $host.on('change', '.rpt-party', (event) => {
     state.party = event.currentTarget.value;

@@ -24,7 +24,7 @@
   <script type="module">
     // Runs against its own IndexedDB, so the app's data is never touched.
     import * as db from '../js/core/db.js';
-    import { addDays, todayISO } from '../js/core/dates.js';
+    import { addDays, periodRange, todayISO } from '../js/core/dates.js';
     import * as products from '../js/services/products.js';
     import * as stock from '../js/services/stock.js';
     import * as ledger from '../js/services/ledger.js';
@@ -44,6 +44,7 @@
     import * as practice from '../js/services/practice.js';
     import * as donut from '../js/core/donut.js';
     import * as dashboardService from '../js/services/dashboard.js';
+    import * as practiceReports from '../js/services/practice-reports.js';
 
     db.useDatabase('shifa-services-test');
 
@@ -1264,6 +1265,86 @@
 
     /* ---------- runner ---------- */
 
+    /* ---------- 18. practice reports ---------- */
+
+    async function periodsAndHelpersGroup() {
+      // 2026-10-30 is a Friday, so this week starts on Monday 26 October.
+      const today = '2026-10-30';
+      const range = (preset, extra = {}) => periodRange(preset, { today, ...extra });
+      eq('today is the day itself', range('today'), { from: today, to: today });
+      eq('yesterday', range('yesterday'), { from: '2026-10-29', to: '2026-10-29' });
+      eq('this week starts on Monday', range('week'), { from: '2026-10-26', to: today });
+      eq('last week is the seven days before this Monday', range('lastWeek'), { from: '2026-10-19', to: '2026-10-25' });
+      eq('this month starts on the 1st', range('month'), { from: '2026-10-01', to: today });
+      eq('last month is all of September', range('lastMonth'), { from: '2026-09-01', to: '2026-09-30' });
+      eq('this year starts on 1 January', range('year'), { from: '2026-01-01', to: today });
+      eq('all time is open at both ends', range('all'), { from: '', to: '￿' });
+      eq('custom keeps the dates given; an open end means today', range('custom', { from: '2026-10-01' }), { from: '2026-10-01', to: today });
+
+      const rows = [
+        { charged: 1000, cost: 600, profit: 400, voided: false },
+        { charged: 500, cost: 700, profit: -200, voided: false },
+        { charged: 9999, cost: 0, profit: 9999, voided: true },
+      ];
+      const kpis = practiceReports.practiceKpis(rows);
+      eq('KPIs count only practices that are not voided', kpis.count, 2);
+      eq('KPIs total the charge, cost and profit', [kpis.charged, kpis.cost, kpis.profit], [1500, 1300, 200]);
+      eq('average charge is charged over count', kpis.averageCharge, 750);
+      eq('average profit is profit over count', kpis.averageProfit, 100);
+      ok('margin is profit over charged', Math.abs(kpis.margin - 200 / 1500) < 1e-9);
+      eq('best practice is the highest profit', kpis.best.profit, 400);
+      eq('worst practice is the lowest profit', kpis.worst.profit, -200);
+      const empty = practiceReports.practiceKpis([]);
+      eq('no practices: margin is null, not a division by zero', [empty.count, empty.margin, empty.best], [0, null, null]);
+
+      eq('rank by quantity reads units', practiceReports.rankValue({ units: 5, revenue: 900, cost: 700 }, 'qty'), 5);
+      eq('rank by revenue reads revenue', practiceReports.rankValue({ units: 5, revenue: 900, cost: 700 }, 'revenue'), 900);
+      eq('rank by profit is revenue less cost', practiceReports.rankValue({ units: 5, revenue: 900, cost: 700 }, 'profit'), 200);
+      eq('25 units of 10 per pack is 2 packs and 5 loose', practiceReports.packsText(25, 10), { packs: 2, loose: 5 });
+
+      // Three equal lines share 100 as 33, 33 and 34: the last line takes the rounding, so the shares add up exactly.
+      const shares = practiceReports.chargedShares(
+        [{ id: 'p1', chargedAmount: 100 }],
+        [{ id: 'a', practiceId: 'p1', lineList: 1 }, { id: 'b', practiceId: 'p1', lineList: 1 }, { id: 'c', practiceId: 'p1', lineList: 1 }],
+      );
+      eq('three equal lines share 100 as 33, 33, 34', [...shares.values()], [33, 33, 34]);
+      eq('the shares of a practice add up to its charge', [...shares.values()].reduce((t, v) => t + v, 0), 100);
+    }
+
+    async function practiceReportsGroup() {
+      await resetDb();
+      const pan = await products.createProduct({ name: 'Panadol 500mg', code: 'PN5', class: 'otc', soldAs: 'strip', unitsPerPack: 10, costPerPack: 5000, salePricePerPack: 8000 });
+      const ris = await products.createProduct({ name: 'Risek', code: 'RSK', class: 'otc', soldAs: 'strip', unitsPerPack: 10, costPerPack: 5000, salePricePerPack: 8000 });
+      await stock.addBatch({ productId: pan.id, batchNo: 'PN-A', expiry: isoIn(200), packs: 10, costPerPack: 5000, mrp: 8000 });
+      await stock.addBatch({ productId: ris.id, batchNo: 'RS-1', expiry: isoIn(200), packs: 10, costPerPack: 5000, mrp: 8000 });
+      const today = todayISO();
+      const period = { from: today, to: today };
+
+      const kept = await practice.createPractice({ items: [{ productId: pan.id, packs: 1 }, { productId: ris.id, packs: 1 }], chargedAmount: 10000, patientName: 'Kept' });
+      const gone = await practice.createPractice({ items: [{ productId: pan.id, packs: 2 }], chargedAmount: 12000, patientName: 'Voided' });
+      await practice.voidPractice(gone.id, { reason: 'Entered by mistake' });
+
+      const hidden = await practiceReports.practiceReportRows({ ...period });
+      eq('voided practices are hidden by default', hidden.map((r) => r.number), [kept.number]);
+      const shown = await practiceReports.practiceReportRows({ ...period, showVoided: true });
+      eq('show voided lists both practices', shown.length, 2);
+      eq('exactly one of them is marked voided', shown.filter((r) => r.voided).length, 1);
+
+      const kpis = practiceReports.practiceKpis(shown);
+      eq('KPIs leave the voided practice out', kpis.count, 1);
+      eq('the kept practice: cost 10000, charged 10000, profit 0', [kpis.cost, kpis.charged, kpis.profit], [10000, 10000, 0]);
+
+      const medicines = await practiceReports.practiceByMedicine({ ...period });
+      eq('by medicine lists the two medicines of the kept practice', medicines.length, 2);
+      const panadol = medicines.find((m) => m.label === 'Panadol 500mg');
+      eq('Panadol: one pack is 10 units', panadol.units, 10);
+      eq('Panadol: its charged share is its list-price share of 10000 (8000 of 16000)', panadol.charged, 5000);
+      eq('Panadol: profit share is charged share less cost', panadol.profit, 0);
+
+      const fromPractice = await practiceReports.topProducts({ from: '', to: '￿', source: 'practice', rank: 'qty', limit: 20 });
+      eq('top sellers from practice count only the kept practice (Panadol 10 units, not 30)', fromPractice.rows.find((r) => r.name === 'Panadol 500mg')?.units, 10);
+    }
+
     const groups = [
       ['products', productsGroup],
       ['stock and FEFO', stockGroup],
@@ -1282,6 +1363,8 @@
       ['practice', practiceGroup],
       ['practice screen services', practiceScreenGroup],
       ['dashboard: sales vs practice donut', donutGroup],
+      ['practice reports: periods and helpers', periodsAndHelpersGroup],
+      ['practice reports: from the database', practiceReportsGroup],
     ];
 
     const list = document.getElementById('results');

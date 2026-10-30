@@ -68,3 +68,40 @@ export function expiryState(expiryISO, { today = todayISO(), warnDays = 90 } = {
   if (expiryISO <= addDays(today, warnDays)) return 'soon';
   return 'ok';
 }
+
+/**
+ * The date range a report period means, as { from, to } (YYYY-MM-DD, inclusive; '' = no lower bound).
+ * Presets: today, yesterday, week (Monday to today), lastWeek (the Monday-to-Sunday week before), month, lastMonth,
+ * last3 (the current month and the two before it), year, all, custom (uses from and to; a missing end is today).
+ */
+export function periodRange(preset, { today = todayISO(), from = '', to = '' } = {}) {
+  const [year, month, day] = today.split('-').map(Number);
+  const iso = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const at = (y, m, d) => new Date(y, m, d);
+  const weekday = (at(year, month - 1, day).getDay() + 6) % 7; // Monday = 0
+  const monday = at(year, month - 1, day - weekday);
+  switch (preset) {
+    case 'today':
+      return { from: today, to: today };
+    case 'yesterday': {
+      const y = iso(at(year, month - 1, day - 1));
+      return { from: y, to: y };
+    }
+    case 'week':
+      return { from: iso(monday), to: today };
+    case 'lastWeek':
+      return { from: iso(at(monday.getFullYear(), monday.getMonth(), monday.getDate() - 7)), to: iso(at(monday.getFullYear(), monday.getMonth(), monday.getDate() - 1)) };
+    case 'month':
+      return { from: `${today.slice(0, 8)}01`, to: today };
+    case 'lastMonth':
+      return { from: iso(at(year, month - 2, 1)), to: iso(at(year, month - 1, 0)) };
+    case 'last3':
+      return { from: iso(at(year, month - 3, 1)), to: today };
+    case 'year':
+      return { from: `${year}-01-01`, to: today };
+    case 'custom':
+      return { from, to: to || today };
+    default:
+      return { from: '', to: '\uffff' };
+  }
+}

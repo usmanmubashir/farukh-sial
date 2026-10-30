@@ -50,6 +50,30 @@ export function periodBar(state) {
     </div>`;
 }
 
+/** The presets the reports offer, in the order they show. Dates are worked out by periodRange() in dates.js. */
+export const REPORT_PRESETS = ['today', 'yesterday', 'week', 'lastWeek', 'month', 'lastMonth', 'last3', 'year', 'all'];
+
+/** The full period bar for the reports: nine presets plus From and To dates. A date switches the chips to 'custom'. */
+export function periodBarFull(state) {
+  const chip = (key) =>
+    `<button type="button" class="chip" data-period="${key}" aria-pressed="${state.period === key}">${esc(t(`rpt.period.${key}`))}</button>`;
+  const badRange = state.period === 'custom' && state.from && state.to && state.from > state.to;
+  return `
+    <div class="doc-period">
+      <div class="chip-row" role="group" aria-label="${esc(t('doc.period'))}">
+        ${REPORT_PRESETS.map(chip).join('')}
+      </div>
+      <label class="doc-date">
+        <span>${esc(t('doc.from'))}</span>
+        <input type="date" name="from" value="${esc(state.from ?? '')}" aria-invalid="${Boolean(badRange)}">
+      </label>
+      <label class="doc-date">
+        <span>${esc(t('doc.to'))}</span>
+        <input type="date" name="to" value="${esc(state.to ?? '')}" aria-invalid="${Boolean(badRange)}">
+      </label>
+    </div>`;
+}
+
 /** Chips that choose one value from a list. group is the data attribute name, for example "status". */
 export function chipGroup(group, items, active, label) {
   return `<div class="chip-row" role="group" aria-label="${esc(label)}">${items

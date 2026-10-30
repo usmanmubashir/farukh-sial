@@ -2253,6 +2253,283 @@
   }
 }
 
+/* Practice reports: KPI tiles, medal badges, voided and loss rows, trend charts and ranked bars. */
+
+.rpt-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: var(--space-3);
+  margin-block: var(--space-3);
+}
+
+.rpt-kpi-grid > * {
+  min-width: 0;
+}
+
+.rpt-kpi-grid .stat-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Money stays on one line (a figure is never split across lines), so the tiles use a smaller figure. */
+.rpt-kpi-grid .stat-value {
+  min-width: 0;
+  font-size: 1.15rem;
+}
+
+.rpt-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 36px;
+}
+
+.rpt-cell.rpt-rank {
+  text-align: center;
+}
+
+.rpt-cell.is-loss {
+  color: var(--c-danger);
+}
+
+.rpt-row.is-voided .rpt-cell {
+  color: var(--c-text-muted);
+  text-decoration: line-through;
+}
+
+.rpt-row-link {
+  cursor: pointer;
+}
+
+.rpt-row-link:hover {
+  background: var(--c-brand-soft);
+}
+
+.rpt-row-link:focus-visible {
+  outline: 2px solid var(--c-focus);
+  outline-offset: -2px;
+}
+
+.rpt-totals-bottom {
+  overflow-x: auto;
+  border-block-start: 2px solid var(--c-border);
+}
+
+.rpt-totals-bottom:empty {
+  display: none;
+}
+
+.rank-badge {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.6rem;
+  block-size: 1.6rem;
+  border-radius: 50%;
+  background: var(--c-surface-muted);
+  color: var(--c-text);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+
+.rank-badge--1 {
+  background: #fcd34d;
+  color: #451a03;
+}
+
+.rank-badge--2 {
+  background: #e5e7eb;
+  color: #1f2937;
+}
+
+.rank-badge--3 {
+  background: #f5c49a;
+  color: #431407;
+}
+
+.skeleton-stack {
+  display: grid;
+  gap: var(--space-2);
+  margin-block: var(--space-3);
+}
+
+.skeleton-stack[hidden] {
+  display: none;
+}
+
+.trend {
+  margin: 0;
+}
+
+.trend-svg {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+  overflow: visible;
+}
+
+.chart-axis {
+  stroke: var(--c-border-strong);
+  stroke-width: 1;
+}
+
+.chart-label {
+  fill: var(--c-text-muted);
+  font-size: 11px;
+}
+
+.trend-line {
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.trend-line--charged,
+.trend-dot--charged,
+.trend-swatch--charged {
+  stroke: var(--c-practice);
+  fill: var(--c-practice);
+  background: var(--c-practice);
+}
+
+.trend-line--cost,
+.trend-dot--cost,
+.trend-swatch--cost {
+  stroke: var(--accent-orange);
+  fill: var(--accent-orange);
+  background: var(--accent-orange);
+}
+
+.trend-line--profit,
+.trend-dot--profit,
+.trend-swatch--profit {
+  stroke: var(--c-ok);
+  fill: var(--c-ok);
+  background: var(--c-ok);
+}
+
+.trend-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-block-start: var(--space-2);
+  color: var(--c-text-muted);
+  font-size: var(--fs-sm);
+}
+
+.trend-key {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.trend-swatch--charged,
+.trend-swatch--cost,
+.trend-swatch--profit {
+  display: inline-block;
+  inline-size: 0.7rem;
+  block-size: 0.7rem;
+  border-radius: 2px;
+}
+
+.stack-part {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  animation: stack-rise 500ms var(--delay, 0ms) cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.stack-part--sales {
+  fill: var(--c-brand);
+}
+
+.stack-part--practice {
+  fill: var(--c-practice);
+}
+
+@keyframes stack-rise {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+.hbars {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hbar {
+  display: grid;
+  grid-template-columns: 2rem minmax(6rem, 1fr) minmax(0, 2fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+}
+
+.hbar-rank {
+  color: var(--c-text-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.hbar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hbar-track {
+  display: block;
+  block-size: 0.6rem;
+  border-radius: 999px;
+  background: var(--c-surface-muted);
+  overflow: hidden;
+}
+
+.hbar-fill {
+  display: block;
+  block-size: 100%;
+  inline-size: 100%;
+  border-radius: inherit;
+  background: var(--c-brand);
+  transform-origin: left center;
+  transform: scaleX(var(--share, 0));
+  animation: hbar-grow 700ms var(--delay, 0ms) cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.hbar-fill--practice {
+  background: var(--c-practice);
+}
+
+[dir='rtl'] .hbar-fill {
+  transform-origin: right center;
+}
+
+.hbar-value {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@keyframes hbar-grow {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+.reduce-motion .stack-part,
+.reduce-motion .hbar-fill,
+.reduce-motion .skeleton-stack .skeleton {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stack-part,
+  .hbar-fill {
+    animation: none;
+  }
+}
+
 /* ---------- Settings and backup ---------- */
 
 .set-root,

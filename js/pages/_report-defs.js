@@ -30,6 +30,7 @@ import {
   stockByProduct,
 } from '../services/reports.js';
 import { ledgerGroup } from '../services/rollups.js';
+import { PRACTICE_GROUP, PRACTICE_REPORTS } from './_practice-report-defs.js';
 
 export const GROUPS = [
   { key: 'inventory', reports: ['stock', 'batches', 'expiry', 'lowstock', 'dead'] },
@@ -37,6 +38,7 @@ export const GROUPS = [
   { key: 'purchases', reports: ['purchases', 'purchaseReturns', 'purchaseMedicine', 'supplier'] },
   { key: 'parties', reports: ['customerLedger', 'supplierLedger', 'receivables', 'payables'] },
   { key: 'accounts', reports: ['cashBook', 'accountLedger', 'dailyClosing', 'profit'] },
+  PRACTICE_GROUP,
 ];
 
 const partyLabel = (map, id) => map.get(id)?.name ?? '';
@@ -66,6 +68,7 @@ async function parties() {
 /* ---------- Definitions ---------- */
 
 export const REPORTS = {
+  ...PRACTICE_REPORTS,
   /* Inventory */
   stock: {
     group: 'inventory', period: false, search: true,

@@ -7,7 +7,8 @@ import { esc, icon } from '../core/ui.js';
 import * as anim from '../core/anim.js';
 import { format } from '../core/money.js';
 import { formatDate, formatDateTime, todayISO } from '../core/dates.js';
-import { getPractice, listPractices, practiceTotals, voidPractice } from '../services/practice.js';
+import { listPractices, practiceTotals } from '../services/practice.js';
+import { openPracticeDetail } from './_practice-detail.js';
 
 export const route = '/practice-list';
 export const title = 'nav.practiceList';
@@ -138,51 +139,6 @@ async function load() {
   anim.scanCounts($host[0]);
 }
 
-async function openDetail(id) {
-  const p = await getPractice(id);
-  const items = p.items.map((i) => `<tr><td>${esc(i.productName)} <span class="muted small">${esc(i.strength ?? '')}</span></td>
-      <td>${esc(i.batchNo)}</td><td class="num">${esc(i.qtyUnits)}</td><td class="num">${money(i.lineList)}</td><td class="num">${money(i.lineCost)}</td></tr>`).join('');
-  const voidBlock = p.voided
-    ? `<p class="pl-voided-note">${esc(t('practiceList.voidedOn', { date: formatDate(p.void.voidDate), reason: p.void.reason }))}</p>`
-    : `<form class="pl-void" data-void>
-         <label class="field"><span>${esc(t('practiceList.voidReason'))}</span><input name="reason" required autocomplete="off"></label>
-         <button type="submit" class="btn btn-danger">${esc(t('practiceList.voidButton'))}</button>
-         <p class="muted small">${esc(t('practiceList.voidNote'))}</p>
-       </form>`;
-  const $body = $(`
-    <div class="pl-detail">
-      <dl class="doc-totals">
-        <div><dt>${esc(t('practiceList.charged'))}</dt><dd>${money(p.chargedAmount)}</dd></div>
-        <div><dt>${esc(t('practiceList.cost'))}</dt><dd>${money(p.costTotal)}</dd></div>
-        <div><dt>${esc(t('practiceList.profit'))}</dt><dd class="${p.profit < 0 ? 'is-loss' : 'is-profit'}">${money(p.profit)}</dd></div>
-        <div><dt>${esc(t('practiceList.calculated'))}</dt><dd>${money(p.calculatedTotal)}</dd></div>
-      </dl>
-      <div class="table-wrap"><table class="table"><thead><tr>
-        <th>${esc(t('practiceList.medicine'))}</th><th>${esc(t('practiceList.batch'))}</th><th class="num">${esc(t('practiceList.units'))}</th>
-        <th class="num">${esc(t('practiceList.listPrice'))}</th><th class="num">${esc(t('practiceList.cost'))}</th>
-      </tr></thead><tbody>${items}</tbody></table></div>
-      ${voidBlock}
-    </div>`);
-  const dialog = ui.openModal({ title: p.number, body: $body, actions: [{ label: t('btn.close') }] });
-  $body.on('submit', '[data-void]', async (event) => {
-    event.preventDefault();
-    const reason = String($body.find('[name="reason"]').val() ?? '').trim();
-    if (!reason) {
-      ui.toast(t('practiceList.reasonNeeded'), { type: 'error' });
-      return;
-    }
-    try {
-      await voidPractice(p.id, { reason });
-      dialog?.close?.();
-      ui.toast(t('practiceList.voided', { number: p.number }), { type: 'success' });
-      await load();
-    } catch (err) {
-      console.warn('[practice-list] void failed', err);
-      ui.toast(t('errors.generic'), { type: 'error' });
-    }
-  });
-}
-
 function bind() {
   $host.on('change', '[name="preset"]', (event) => {
     filter.preset = event.currentTarget.value;
@@ -198,11 +154,11 @@ function bind() {
     filter.voided = event.currentTarget.checked;
     load();
   });
-  $host.on('click', '.pl-row', (event) => openDetail(event.currentTarget.getAttribute('data-id')));
+  $host.on('click', '.pl-row', (event) => openPracticeDetail(event.currentTarget.getAttribute('data-id'), { onChanged: load }));
   $host.on('keydown', '.pl-row', (event) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
-      openDetail(event.currentTarget.getAttribute('data-id'));
+      openPracticeDetail(event.currentTarget.getAttribute('data-id'), { onChanged: load });
     }
   });
 }
