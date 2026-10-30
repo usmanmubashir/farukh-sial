@@ -22,6 +22,12 @@ CREATE TABLE IF NOT EXISTS members (
   stamp TEXT NOT NULL DEFAULT ''
 );
 
+-- pharmacy: the pharmacy's name, given to every device that signs in (one row).
+CREATE TABLE IF NOT EXISTS pharmacy (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  name TEXT NOT NULL
+);
+
 -- sessions: refresh tokens, stored as SHA-256 hashes. A refresh token is used once and replaced.
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash TEXT PRIMARY KEY,

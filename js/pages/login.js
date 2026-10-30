@@ -1,5 +1,5 @@
-// Sign-in. On a device that has no pharmacy yet, the same screen joins one from the sync server (or leads to creating
-// a new pharmacy). After signing in, returns to ?next= when it is a safe in-app path.
+// Sign-in. On a device that has no pharmacy yet, the same screen joins one from the sync server with only the username
+// and password (or leads to creating a new pharmacy). After signing in, returns to ?next= when it is a safe in-app path.
 import * as auth from '../core/auth.js';
 import { t } from '../core/i18n.js';
 import { esc } from '../core/ui.js';
@@ -20,8 +20,6 @@ export async function render($root, params, query = {}) {
         <h2 id="login-title">${esc(t(firstVisit ? 'auth.firstVisitTitle' : title))}</h2>
         <p class="muted">${esc(t(firstVisit ? 'auth.firstVisitSubtitle' : 'auth.loginSubtitle'))}</p>
         <form id="login-form" class="form" novalidate>
-          ${firstVisit ? field({ id: 'login-pharmacy', name: 'pharmacyName', label: 'auth.pharmacyName', autocomplete: 'organization' }) : ''}
-          ${firstVisit ? field({ id: 'login-url', name: 'url', label: 'settings.syncUrl', type: 'url', autocomplete: 'url', value: known.url }) : ''}
           ${field({ id: 'login-user', name: 'username', label: 'auth.username', autocomplete: 'username', value: known.username })}
           ${field({ id: 'login-pass', name: 'password', label: 'auth.password', type: 'password', autocomplete: 'current-password' })}
           <p class="form-error" id="login-error" role="alert" hidden></p>
@@ -46,7 +44,7 @@ async function submit(event, $root, next, firstVisit) {
   const value = (name) => $root.find(`#login-form [name="${name}"]`).val();
   try {
     if (firstVisit) {
-      await joinPharmacy({ pharmacyName: value('pharmacyName'), url: value('url'), username: value('username'), password: value('password') });
+      await joinPharmacy({ username: value('username'), password: value('password') });
     }
     await auth.login(value('username'), value('password'));
     navigate(safeNext(next));

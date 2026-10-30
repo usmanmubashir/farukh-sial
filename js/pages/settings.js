@@ -16,6 +16,7 @@ import { checkIntegrity, recalculateStock } from '../services/stock.js';
 import { importProducts } from '../services/products.js';
 import { isEmptyPharmacy, loadDemoData } from '../services/demo.js';
 import * as sync from '../core/sync.js';
+import { syncServer } from '../core/config.js';
 import { popularMedicines } from '../services/seed-medicines.js';
 
 export const route = '/settings';
@@ -176,7 +177,7 @@ async function syncSection() {
            <option value="supabase"${config?.backend === 'supabase' ? ' selected' : ''}>${esc(t('settings.syncBackendSupabase'))}</option>
          </select>
        </div>
-       ${field('sy-url', 'url', t('settings.syncUrl'), 'url', config?.url ?? '', config?.backend === 'supabase' ? t('settings.syncUrlHelp') : t('settings.syncUrlHelpCloudflare'))}
+       ${field('sy-url', 'url', t('settings.syncUrl'), 'url', config?.url || syncServer(), config?.backend === 'supabase' ? t('settings.syncUrlHelp') : t('settings.syncUrlHelpCloudflare'))}
        <div data-only="cloudflare"${config?.backend === 'supabase' ? ' hidden' : ''}>${field('sy-username', 'username', t('settings.syncUsername'), 'text', config?.username ?? '', t('settings.syncUsernameHelp'))}</div>
        <div data-only="supabase"${config?.backend === 'supabase' ? '' : ' hidden'}>${field('sy-key', 'anonKey', t('settings.syncKey'), 'text', config?.anonKey ?? '', t('settings.syncKeyHelp'))}</div>
        <div data-only="supabase"${config?.backend === 'supabase' ? '' : ' hidden'}>${field('sy-email', 'email', t('settings.syncEmail'), 'email', config?.email ?? '')}</div>

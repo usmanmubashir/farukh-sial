@@ -102,7 +102,8 @@ async function signIn(request, env) {
   if (!member || typeof body.proof !== 'string' || !sameText(body.proof, stored)) {
     return json({ error: 'invalid_credentials' }, 401);
   }
-  return json(await issueTokens(env, member.id));
+  const pharmacy = await env.DB.prepare("SELECT name FROM pharmacy WHERE id = 1").first();
+  return json({ ...(await issueTokens(env, member.id)), pharmacy_name: pharmacy?.name ?? "" });
 }
 
 async function refresh(request, env) {

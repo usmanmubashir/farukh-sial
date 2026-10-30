@@ -37,6 +37,7 @@ const SHELL = [
   './js/core/anim.js',
   './js/core/auth.js',
   './js/core/chart.js',
+  './js/core/config.js',
   './js/core/csv.js',
   './js/core/dates.js',
   './js/core/db.js',

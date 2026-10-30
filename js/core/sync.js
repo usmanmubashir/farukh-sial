@@ -15,6 +15,7 @@ import * as replication from '../services/replication.js';
 import { rebuildRollups } from '../services/rollups.js';
 import { SupabaseAdapter, signIn, SyncError } from './sync-supabase.js';
 import { CloudflareAdapter, signInCloudflare } from './sync-cloudflare.js';
+import { syncServer } from './config.js';
 
 const PUSH_BATCH = 200;
 const PULL_PAGE = 500;
@@ -76,12 +77,13 @@ export const getConfig = () => db.getSetting('syncConfig', null);
  * joins an existing pharmacy, so an empty device adds nothing.
  */
 export async function connect({ backend = 'supabase', url, anonKey, email, username, password, upload = true }) {
-  const base = String(url).trim().replace(/\/+$/, '');
+  const base = String(url || syncServer()).trim().replace(/\/+$/, '');
   let config;
   let session;
   if (backend === 'cloudflare') {
     config = { backend, url: base, username: String(username).trim().toLowerCase() };
     session = await signInCloudflare(config, password);
+    config.pharmacyName = session.pharmacyName ?? '';
   } else {
     config = { backend: 'supabase', url: base, anonKey: String(anonKey).trim(), email: String(email).trim() };
     session = await signIn(config, config.email, password);

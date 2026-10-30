@@ -80,6 +80,7 @@ const ownerHash = await proofFor('owner-pass-1', salt, iterations);
 sqlite
   .prepare('INSERT INTO members (id, username, salt, hash, iterations, active, stamp) VALUES (?, ?, ?, ?, ?, 1, ?)')
   .run('owner', 'owner', salt, ownerHash, iterations, '');
+sqlite.prepare("INSERT INTO pharmacy (id, name) VALUES (1, 'Test Pharmacy')").run();
 
 // Sign-in
 let res = await call('GET', '/auth/salt?username=nobody');
@@ -93,6 +94,7 @@ check('a wrong proof is refused', res.status === 401);
 res = await call('POST', '/auth/token', { body: { username: 'owner', proof: await proofFor('owner-pass-1', salt, iterations) } });
 const session = await res.json();
 check('the right proof gets tokens', res.status === 200 && session.access_token && session.refresh_token);
+check('sign-in tells the device the pharmacy name', session.pharmacy_name === 'Test Pharmacy', String(session.pharmacy_name));
 const token = session.access_token;
 
 // Auth is required for ops

@@ -37,6 +37,8 @@ function sessionFrom(body, res) {
     accessToken: body.access_token,
     refreshToken: body.refresh_token,
     expiresAt: Date.now() + (body.expires_in ?? 3600) * 1000,
+    // Sign-in also tells the device the pharmacy's name, so a joining device needs no name typed in.
+    pharmacyName: body.pharmacy_name ?? '',
   };
 }
 
