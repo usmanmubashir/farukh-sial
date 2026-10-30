@@ -20,6 +20,8 @@ import { OPEN_END } from '../services/reports.js';
 import { ensureRollups, rollupsReady } from '../services/rollups.js';
 import * as shared from './_doc-shared.js';
 import { GROUPS, REPORTS, accountChoices } from './_report-defs.js';
+import * as store from '../core/store.js';
+import { canOpen } from '../core/access.js';
 
 export const route = '/reports';
 export const title = 'nav.reports';
@@ -51,16 +53,19 @@ const REPORT_ICON = {
 
 /* ---------- Grid ---------- */
 
+/** Only the reports the signed-in user may open are listed on the grid. */
+const allowedReport = (key) => canOpen(store.get('access'), `report:${key}`);
+
 function gridHtml() {
   return `
     ${shared.pageHead(t('rpt.title'), '')}
     <p class="muted">${esc(t('rpt.intro'))}</p>
-    ${GROUPS.map(
+    ${GROUPS.filter((group) => group.reports.some(allowedReport)).map(
       (group) => `
       <section class="rpt-group" aria-labelledby="grp-${group.key}">
         <h3 class="rpt-group-title" id="grp-${group.key}">${icon(GROUP_ICON[group.key])} ${esc(t(`rpt.group.${group.key}`))}</h3>
         <div class="rpt-cards">
-          ${group.reports
+          ${group.reports.filter(allowedReport)
             .map(
               (rk) => `
             <a class="card card--interactive rpt-card" href="#/reports/${esc(rk)}">

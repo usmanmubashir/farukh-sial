@@ -6,7 +6,7 @@ import * as store from './core/store.js';
 import * as events from './core/events.js';
 import { createRouter, navigate } from './core/router.js';
 import * as auth from './core/auth.js';
-import { accessOf, canOpen } from './core/access.js';
+import { accessOf, canOpen, sectionOf } from './core/access.js';
 import * as sync from './core/sync.js';
 import * as ui from './core/ui.js';
 import * as anim from './core/anim.js';
@@ -38,9 +38,9 @@ const ROUTES = [
   { path: '/practice-list', nav: 'daily', section: 'practice-list', label: 'nav.practiceList', icon: 'receipt', load: page('practice-list') },
   { path: '/sales', nav: 'daily', section: 'sales', icon: 'receipt', load: page('sales') },
   { path: '/purchases', nav: 'daily', section: 'purchases', icon: 'purchase', load: page('purchases') },
-  { path: '/purchases/new', section: 'purchases', load: page('purchase-new') },
+  { path: '/purchases/new', section: 'purchases-new', load: page('purchase-new') },
   { path: '/returns', nav: 'daily', section: 'returns', icon: 'returns', load: page('returns') },
-  { path: '/returns/new', section: 'returns', load: page('return-new') },
+  { path: '/returns/new', section: 'returns-new', load: page('return-new') },
 
   { path: '/products', nav: 'medicines', section: 'products', label: 'nav.products', icon: 'products', load: page('products') },
   { path: '/stock', nav: 'medicines', section: 'stock', icon: 'stock', bottom: 'stock', load: page('stock') },
@@ -183,7 +183,7 @@ async function accessGuard(to) {
     return to.path === '/dashboard' ? '/login' : `/login?next=${encodeURIComponent(to.path)}`;
   }
   if (guard === 'guest' && user) return homeFor(access);
-  if (!canOpen(access, to.route?.section)) {
+  if (!canOpen(access, sectionOf(to.route, to.params))) {
     ui.toast(i18n.t('access.denied'), { type: 'error' });
     return homeFor(access);
   }

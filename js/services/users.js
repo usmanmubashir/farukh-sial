@@ -4,7 +4,7 @@
 import * as db from '../core/db.js';
 import * as auth from '../core/auth.js';
 import { AuthError, OWNER_ID, roleOf } from '../core/auth.js';
-import { sanitizeSections } from '../core/access.js';
+import { sanitizeSections, screensOf } from '../core/access.js';
 
 const USERNAME_RULE = /^[a-z0-9._-]{3,32}$/;
 
@@ -21,7 +21,7 @@ const summary = (record) => ({
   username: record.username,
   role: roleOf(record),
   active: record.active !== false,
-  sections: sanitizeSections(record.sections),
+  sections: screensOf(record),
   createdAt: record.createdAt ?? null,
 });
 
@@ -56,7 +56,7 @@ export async function createUser({ username, password, confirm, sections }) {
   const now = Date.now();
   const id = db.newId();
   await db.transaction(async (ctx) => {
-    ctx.put('users', { id, username: name, sections: granted, active: true, createdAt: now, updatedAt: now, ...secret });
+    ctx.put('users', { id, username: name, sections: granted, accessVersion: 2, active: true, createdAt: now, updatedAt: now, ...secret });
   });
   return id;
 }
@@ -65,7 +65,8 @@ export async function createUser({ username, password, confirm, sections }) {
 export async function updateUser(id, { username, sections, active } = {}) {
   await requireOwner();
   const record = await staffRecord(id);
-  const patch = { ...record, updatedAt: Date.now() };
+  // Saved as version 2 with the screens as they are now, so an older record is converted the first time it is edited.
+  const patch = { ...record, sections: screensOf(record), accessVersion: 2, updatedAt: Date.now() };
   if (username !== undefined) {
     const name = String(username).trim().toLowerCase();
     if (!USERNAME_RULE.test(name)) throw new AuthError('usernameInvalid');

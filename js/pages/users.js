@@ -5,7 +5,7 @@ import * as ui from '../core/ui.js';
 import { esc, icon } from '../core/ui.js';
 import { t } from '../core/i18n.js';
 import { AuthError } from '../core/auth.js';
-import { OWNER_SCREEN, SCREENS } from '../core/access.js';
+import { OWNER_SCREEN, REPORT_SCREENS, SCREENS } from '../core/access.js';
 import * as users from '../services/users.js';
 
 export const route = '/users';
@@ -46,17 +46,19 @@ function cardHtml(user) {
 
 /** One checkbox per sidebar screen, grouped as the sidebar is. The owner-only screen is shown but cannot be ticked. */
 function screenBoxes(selected) {
-  const box = (screen) => `<label class="user-check"><input type="checkbox" name="section" value="${esc(screen.key)}"${selected.includes(screen.key) ? ' checked' : ''}> <span>${esc(screenLabel(screen))}</span></label>`;
+  const box = (screen) => `<label class="user-check${screen.sub ? ' is-sub' : ''}"><input type="checkbox" name="section" value="${esc(screen.key)}"${selected.includes(screen.key) ? ' checked' : ''}> <span>${esc(screenLabel(screen))}</span></label>`;
   const ownerBox = `<label class="user-check is-locked"><input type="checkbox" disabled checked> <span>${esc(screenLabel(OWNER_SCREEN))}</span> <span class="muted small">${esc(t('access.ownerOnly'))}</span></label>`;
   return `<fieldset class="user-sections">
     <legend>${esc(t('users.sections'))}</legend>
     ${GROUPS.map((group) => {
       const screens = SCREENS.filter((screen) => screen.group === group);
+      const reports = group === 'accounts' ? REPORT_SCREENS : [];
       const extra = group === 'admin' ? ownerBox : '';
       if (!screens.length && !extra) return '';
       return `<div class="user-group">
         <h4 class="user-group-title">${esc(t(`nav.group.${group}`))}</h4>
         <div class="user-group-checks">${screens.map(box).join('')}${extra}</div>
+        ${reports.length ? `<h5 class="user-group-title user-sub-title">${esc(t('access.reportsHeading'))}</h5><div class="user-group-checks">${reports.map(box).join('')}</div>` : ''}
       </div>`;
     }).join('')}
   </fieldset>`;

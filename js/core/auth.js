@@ -5,7 +5,7 @@
 // the users store on every navigation, so a change made by the owner applies on the next page.
 import * as db from './db.js';
 import { set as setState } from './store.js';
-import { accessOf } from './access.js';
+import { accessOf, screensOf } from './access.js';
 
 export const SESSION_HOURS = 24;
 const PBKDF2_ITERATIONS = 310000;
@@ -84,7 +84,7 @@ export async function sessionHours() {
 }
 
 function setAccess(record) {
-  setState('access', record ? accessOf({ role: roleOf(record), sections: record.sections }) : null);
+  setState('access', record ? accessOf({ role: roleOf(record), sections: screensOf(record) }) : null);
 }
 
 async function startSession(record, pharmacyName) {
@@ -182,7 +182,7 @@ export async function changePassword({ current, password, confirm }) {
 export async function currentUser() {
   const record = await sessionRecord();
   if (!record) return null;
-  return { id: record.id, username: record.username, role: roleOf(record), sections: record.sections ?? [] };
+  return { id: record.id, username: record.username, role: roleOf(record), sections: screensOf(record) };
 }
 
 /** The owner's username (lower case), for the account screen. */
