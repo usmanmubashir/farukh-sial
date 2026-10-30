@@ -141,6 +141,107 @@ Popular medicines (`js/services/seed-medicines.js`) import without prices. Impor
 
 Batch expiry alerts, customer credit limits, and backup/restore metadata will be added as new migrations (`migrations[1]` and later). Existing migrations are not edited.
 
+## Practice (PROPOSED, not implemented yet)
+
+Status: a proposal for review. Nothing below is in the code yet. Once approved, the schema, migration and ledger lines are built as described here, and this section is updated to match what was built.
+
+A **practice** is medicine given to a patient at the owner's discretion, with a charge the owner decides. It is not a sale. It is kept in its own stores, its own income account and its own cost account, so sales profit and practice profit can be reported apart.
+
+### Stores (schema version 6)
+
+| Store | Key | Indexes | Synced | Purpose |
+|---|---|---|---|---|
+| `practices` | `id` | `number` (unique), `date`, `customerId` | yes | One immutable document per practice. Amounts in paisa. |
+| `practiceItems` | `id` | `practiceId`, `productId`, `batchId` | yes | One row per batch allocation. Keeps the exact batch and cost, so a void restores the same stock. |
+| `practiceVoids` | `id` | `practiceId` (unique) | yes | Append-only void event. One per practice at most. |
+| `practiceKits` | `id` | `name` | yes | Saved item sets ("Fever kit"). Edited with last writer wins. |
+| `dailyPractice` | `date` | — | no (derived) | Daily rollup for reports, rebuilt like the sales rollups. |
+
+Fields of `practices`:
+
+```
+{ id, number: "PRC-0001", date: "2026-10-28", dateTime: "2026-10-28T14:35:00.000Z",
+  patientName, patientPhone, doctorRef, note,
+  customerId: null,            // set when the practice is on a customer's account (udhaar)
+  calculatedTotal,             // paisa: sum of qty × sale price (loose price where used)
+  chargedAmount,               // paisa: what the owner decided to charge (any amount ≥ 0)
+  costTotal,                   // paisa: sum of FEFO batch costs of the allocations
+  profit,                      // paisa: chargedAmount − costTotal (stored for reports, recomputed on read)
+  paymentAccountCode,          // '1000' cash, '1010' bank, '1011–1099' wallets, or '1100' receivable (udhaar)
+  createdBy, deviceId, prefix: "PRC", isRx: false, updatedAt, stamp }
+```
+
+Fields of `practiceItems`: `{ id, practiceId, productId, batchId, unitType: "pack" | "loose", qtyUnits, listPrice, costPerUnit, lineList, lineCost, date }`. Money in paisa. `qtyUnits` is in base units, like `stockMovements.units`.
+
+Fields of `practiceVoids`: `{ id, practiceId, voidedAt, reason, voidedBy, deviceId, stamp }`. The void reason is required and the owner makes the void.
+
+`practice.status` is not stored. It is derived: a practice is voided when a `practiceVoids` row exists for it. This keeps the practice record immutable, which is the sync rule (see below).
+
+Migration (version 5 to 6): creates `practices`, `practiceItems`, `practiceVoids`, `practiceKits` and `dailyPractice` with the indexes above. It changes no existing store. The two new system accounts are added through `DEFAULT_ACCOUNTS` and written by `seedDefaultAccounts()` on boot, which already runs on every start and only adds missing rows. A backup from schema 3, 4 or 5 still restores; it simply has no practice rows.
+
+### System accounts (new)
+
+| Code | Name | Type | Normal | Group |
+|---|---|---|---|---|
+| 4300 | Practice Income | income | credit | Income |
+| 5300 | Cost of Practice | expense | debit | Cost of goods (next to COGS 5200) |
+
+They use the fixed ids `acc-4300` and `acc-5300`, like the other system accounts.
+
+### Ledger entries (proposed)
+
+Same convention as sales: money in against income, and cost moves Inventory → cost of goods. Using the example from the brief (3 Panadol and 3 Risek, calculated Rs 480, charged Rs 200, FEFO cost assumed Rs 260):
+
+| Case | Lines | Result |
+|---|---|---|
+| Paid in cash | Dr 1000 Cash 200.00 · Cr 4300 Practice Income 200.00 · Dr 5300 Cost of Practice 260.00 · Cr 1200 Inventory 260.00 | Profit −60.00 (a loss) |
+| Paid by bank or wallet | as above, with Dr 1010 or 1011–1099 instead of 1000 | same profit |
+| On a customer's account (udhaar) | Dr 1100 Receivable 200.00 (party = customer) instead of cash | same profit; the customer's balance rises by 200 |
+| Charged 0 (free) | Dr 5300 Cost of Practice 260.00 · Cr 1200 Inventory 260.00 | Profit −260.00. The zero income line is dropped, as `postEntry` already does. |
+| Charged above the calculated total | as the cash case with the higher amount | allowed; the difference is still income |
+| Void (owner, with reason) | exact reverse of every line of the practice, with docType `practiceVoid` | net zero; the reversal is a new append-only ledger row, not an edit |
+
+Ledger rows carry `docType: "practice"` (or `"practiceVoid"`) and `docId` = the practice id, so `ledgerGroup()` can map them to a `practice` cash group for the cash book and the daily closing.
+
+Balance check: the trial balance difference is zero after save, void and a zero-charge practice (each document balances on its own).
+
+### Stock movements (proposed)
+
+- Save: one negative movement per `practiceItems` row, `type: "practice"`, `docType: "practice"`, `docId` = practice id, `batchId` from the allocation. Allocation is FEFO through the existing `allocateFEFOIn`, so expired batches are never used.
+- Void: one positive movement per row with `type: "practiceVoid"` to the same batch. The batch receives back exactly what was taken, and the history keeps both rows.
+- `batches.onHand` is updated only through `applyMovementIn`, as today.
+
+### Profit and cost
+
+- `costTotal` is the sum of the FEFO batch costs of the allocations (`costPerUnit` × `qtyUnits`), not the latest purchase cost.
+- Profit = `chargedAmount − costTotal`. It equals 4300 − 5300 for the practice's own lines, so the ledger and the practice report agree.
+
+### Sync rules (proposed)
+
+- `practices` and `practiceItems` are immutable after save. They are written once, with a new stamp. A device never edits them, so two devices never conflict on a practice.
+- Voids are `practiceVoids` rows, append-only. A practice is voided when any void row exists. Two devices voiding the same practice both write a row with the same `practiceId`; the unique index on `practiceId` lets one win (the first stamp, by the usual last-writer order). The second device's void is reported as a sync issue, not silently applied twice.
+- `practiceKits` are normal synced records with last writer wins.
+- `dailyPractice` is derived and never synced.
+
+### Reports and dashboard (proposed)
+
+- Sales figures: from `sales` and `saleItems`, as now. Practice figures: from `practices`, `practiceItems` and the `dailyPractice` rollup.
+- "Total (Sales + Practice)" is the sum of the two. Practice profit is `chargedAmount − costTotal` over non-voided practices.
+- Profit summary: Sales profit, Practice profit, Expenses, Net.
+
+### Decisions for your review
+
+1. **Cost account.** I propose a new 5300 "Cost of Practice" next to COGS 5200, so practice cost is visible apart from sales cost. The alternative is to use 5200 for both, which is simpler but hides the practice cost in the sales profit. Recommendation: 5300.
+2. **Inventory side.** Cost leaves Inventory 1200 directly, as sales do. There is no separate "purchases adjustment" account. Recommendation: keep it as sales does.
+3. **Practice status.** The brief lists `status` and `voidedAt` on the practice. I propose deriving status from `practiceVoids` instead, so the practice record never changes after save. Recommendation: derive it.
+4. **One item row per batch.** When a medicine is spread over two batches (FEFO), I store two `practiceItems` rows, not one. A row must map to one batch so a void restores the exact batches. Recommendation: one row per allocation.
+5. **Udhaar practices need a customer.** A practice on a customer's account must name a customer (`customerId`), so the receivable is tied to a party. Recommendation: required for udhaar; optional otherwise.
+6. **Tax.** Practices carry no sales tax, since the owner sets the charge. Recommendation: no tax on practices.
+7. **Void window.** Voids are owner-only with a reason. I propose no time limit, but the undo toast allows a 10-second void. Question: should a later void be allowed after the batch has expired? Recommendation: yes; the stock goes back to the same batch even if it has expired, and that is recorded.
+8. **Cost visibility.** The app has only the owner role today. I propose a setting "show cost on the practice screen" (default on for the owner). Staff roles do not exist yet, so the setting has no effect until they do. Question: do you want staff accounts added now?
+9. **Backdating.** A setting "allow backdating" (default off). A backdated practice is posted to its own date, so the daily rollups and the closing for that day change. Recommendation: allow it for the owner only.
+10. **Rx register.** A practice that contains a controlled medicine gets an `rxRegister` row with `source: "practice"`, so the Rx register shows it tagged "Practice".
+
 ## Sync fields (schema version 4)
 
 Every row in a synced store carries `stamp`, the time and device of its last change: `"001793271840718.000000.<deviceId>"`. Stamps are fixed width, so they compare as strings. Rows written before version 4 got a `legacy` stamp when the database upgraded.
