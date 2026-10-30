@@ -3628,3 +3628,36 @@ button.status-pill {
 .reduce-motion .donut-empty-ring {
   animation: none;
 }
+
+/* ---------- Phone header: keep the title and the actions apart on narrow screens ---------- */
+/* Under 400px the sync status shows only its coloured dot. The text stays for screen readers and in the sync sheet. */
+@media (max-width: 399px) {
+  .app-header {
+    gap: var(--space-1);
+    padding-inline: var(--space-2);
+  }
+
+  .header-actions {
+    gap: var(--space-1);
+    flex: none;
+  }
+
+  .header-actions .status-pill {
+    font-size: 0;
+    padding: 0 var(--space-2);
+    min-height: 28px;
+    gap: 0;
+  }
+
+  .status-pill::before {
+    margin: 0;
+  }
+
+  .pill-btn {
+    padding: 0 var(--space-2);
+  }
+
+  .page-title {
+    font-size: var(--fs-base);
+  }
+}
