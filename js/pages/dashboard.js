@@ -19,6 +19,7 @@ const TILES = [
   { key: 'batchTrace', path: '/trace', accent: 'cyan', icon: 'batch' },
   { key: 'rxRegister', path: '/rx', accent: 'pink', icon: 'rx' },
   { key: 'customers', path: '/customers', accent: 'amber', icon: 'customers' },
+  { key: 'practice', path: '/practice', accent: 'practice', icon: 'pulse' },
 ];
 
 const MORE = [
@@ -28,6 +29,7 @@ const MORE = [
   { key: 'suppliers', path: '/suppliers', icon: 'suppliers' },
   { key: 'returns', path: '/returns', icon: 'returns' },
   { key: 'cashBook', path: '/vouchers', icon: 'bank' },
+  { key: 'practiceList', path: '/practice-list', icon: 'receipt' },
   { key: 'reports', path: '/reports', icon: 'reports' },
   { key: 'settings', path: '/settings', icon: 'settings' },
 ];

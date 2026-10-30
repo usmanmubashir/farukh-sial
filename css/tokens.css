@@ -78,6 +78,11 @@
   --c-border-strong: var(--n-300);
   /* Field and control outlines: 3:1 against the surface (WCAG 1.4.11). */
   --c-control-border: #6e8582;
+  /* Practice has its own identity: violet, not the sale teal. */
+  --c-practice: #6d28d9;
+  --c-practice-soft: #efe9fd;
+  --accent-practice: #7c3aed;
+  --accent-practice-grad: linear-gradient(135deg, #7c3aed, #a78bfa);
   --c-text: var(--n-900);
   --c-text-muted: var(--n-600);
   --c-scrim: rgb(14 26 29 / 0.42);

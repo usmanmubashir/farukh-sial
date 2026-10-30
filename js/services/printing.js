@@ -44,6 +44,11 @@ export function printInBrowser(model, { copies = 1 } = {}) {
   printArea(html, { width: String(model.width) });
 }
 
+/** Prints ready-made receipt-width HTML (a practice slip). width is 58 or 80 mm, the same sizes as receipts. */
+export function printHtml(html, { width = 80 } = {}) {
+  printArea(html, { width: String(width) });
+}
+
 /** Prints a page document (registers, reports). `size` is 'a4' (the default) and sets the layout in print.css. */
 export function printPage(html, { size = 'a4' } = {}) {
   printArea(html, { page: size });

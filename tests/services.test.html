@@ -1178,6 +1178,45 @@
       eq('the whole book balances at the end', (await ledger.trialBalance()).balanced, true);
     }
 
+    /* ---------- 16. practice screen services ---------- */
+
+    async function practiceScreenGroup() {
+      await resetDb();
+      const pan = await products.createProduct({ name: 'Panadol 500mg', code: 'PN6', class: 'otc', soldAs: 'strip', unitsPerPack: 10, looseSelling: true, looseUnitPrice: 800, costPerPack: 5000, salePricePerPack: 8000 });
+      await stock.addBatch({ productId: pan.id, batchNo: 'P-1', expiry: isoIn(60), packs: 2, costPerPack: 5000, mrp: 8000 });
+
+      // Preview: prices and costs without writing anything; a shortage is reported, not thrown.
+      const preview = await practice.previewPractice({ items: [{ productId: pan.id, packs: 1 }, { productId: pan.id, packs: 5 }], today });
+      eq('preview totals the list price of every line', preview.calculatedTotal, 8000 + 40000);
+      eq('preview cost is the FEFO cost of the units it can supply', preview.costTotal, 5000 + 5000);
+      eq('preview reports what is left after the first line', preview.shortages.map((s) => [s.available, s.requested]), [[10, 50]]);
+      eq('preview wrote no stock movement', (await stockUnits(pan.id)), 20);
+
+      // Holds: set aside, listed, resumed; a discarded hold can be put back.
+      const heldId = await practice.holdPractice({ items: [{ productId: pan.id, mode: 'pack', qty: 1 }], charge: 5000, patientName: 'Held Patient' });
+      eq('a held practice is listed', (await practice.listHeldPractices()).map((h) => h.patientName), ['Held Patient']);
+      const resumed = await practice.resumeHeldPractice(heldId);
+      eq('resuming returns the draft and empties the list', [resumed.charge, (await practice.listHeldPractices()).length], [5000, 0]);
+      const second = await practice.holdPractice({ items: [], patientName: 'Discard me' });
+      const gone = await practice.discardHeldPractice(second);
+      await practice.restoreHeldPractice(gone);
+      eq('a discarded hold can be restored', (await practice.listHeldPractices()).map((h) => h.patientName), ['Discard me']);
+      await practice.discardHeldPractice(second);
+
+      // Repeat last: the same units again, as whole packs.
+      const first = await practice.createPractice({ items: [{ productId: pan.id, packs: 2 }], chargedAmount: 10000, patientName: 'Repeat Patient' });
+      const again = await practice.repeatItemsOf(first.id);
+      eq('repeat gives the same units as packs', again.map((r) => [r.packs, r.looseUnits]), [[2, 0]]);
+      eq('the last active practice is the newest', (await practice.lastActivePractice()).id, first.id);
+      eq('recent patients are listed once each', (await practice.recentPatients()).map((p) => p.name), ['Repeat Patient']);
+
+      // Totals agree with the practices they count.
+      const todayTotals = await practice.practiceTotals({ from: today, to: today });
+      eq('practice totals count the active practices', [todayTotals.count, todayTotals.charged], [1, 10000]);
+      eq('practice totals profit = charged − cost', todayTotals.profit, 10000 - 10000);
+      eq('a range that excludes today has no practices', (await practice.practiceTotals({ from: isoIn(-30), to: isoIn(-20) })).count, 0);
+    }
+
     /* ---------- runner ---------- */
 
     const groups = [
@@ -1196,6 +1235,7 @@
       ['reports: rollups agree with the sales', reportsRollupGroup],
       ['backup: restore gives identical reports', backupGroup],
       ['practice', practiceGroup],
+      ['practice screen services', practiceScreenGroup],
     ];
 
     const list = document.getElementById('results');

@@ -9,7 +9,7 @@ import { ServiceError, missing, optionalInt, requireInt, requireText } from './e
 import { ACCOUNT, postEntryIn, practiceLines, requirePaymentAccount, reversalLines } from './ledger.js';
 import { nextDocNumber } from './numbering.js';
 import { readSettingsIn } from './settings.js';
-import { allocateFEFOIn, applyMovementIn, costOfUnits, unitsFromPacks } from './stock.js';
+import { allocateFEFOIn, applyMovementIn, costOfUnits, fefoOrder, unitsFromPacks } from './stock.js';
 import { applyPractice } from './rollups.js';
 
 /** Classes whose dispensing needs a patient and a doctor (the same rule as sales, when the setting is on). */
@@ -308,4 +308,143 @@ export function deleteKit(id) {
     if (!(await ctx.get('practiceKits', id))) throw missing('kit', id);
     ctx.remove('practiceKits', id);
   });
+}
+
+/* ---------- Preview: what the screen shows before saving. Reads only; nothing is written. ---------- */
+
+/**
+ * Prices and costs the items as saving would, without touching stock.
+ * items: [{ productId, packs, looseUnits }]. Returns the list total, the FEFO cost, each line, and any shortages.
+ * A shortage is reported, not thrown, so the screen can say which medicine is out and offer alternatives.
+ */
+export async function previewPractice({ items = [], today = todayISO() } = {}) {
+  const lines = [];
+  let calculatedTotal = 0;
+  let costTotal = 0;
+  const shortages = [];
+  // One pool per medicine, shared by all its lines, so two lines of the same medicine cannot both claim the same units.
+  const pools = new Map();
+  for (const raw of items) {
+    const packs = Number(raw.packs ?? 0);
+    const looseUnits = Number(raw.looseUnits ?? 0);
+    const product = await db.get('products', raw.productId);
+    if (!product || packs + looseUnits <= 0) continue;
+    const units = unitsFromPacks(product, packs, looseUnits);
+    const list = packs * product.salePricePerPack + looseUnits * (product.looseUnitPrice ?? 0);
+    let cost = 0;
+    let available = 0;
+    if (product.trackStock !== false) {
+      if (!pools.has(product.id)) {
+        const batches = (await db.getAll('batches', { index: 'productId', query: product.id }))
+          .filter((b) => (b.onHand ?? 0) > 0 && b.expiry >= today)
+          .sort(fefoOrder);
+        pools.set(product.id, batches.map((batch) => ({ batch, left: batch.onHand })));
+      }
+      const pool = pools.get(product.id);
+      available = pool.reduce((total, p) => total + p.left, 0);
+      let need = Math.min(units, available);
+      for (const p of pool) {
+        if (need <= 0) break;
+        const take = Math.min(p.left, need);
+        cost += costOfUnits(p.batch.costPerPack ?? 0, product.unitsPerPack, take);
+        p.left -= take;
+        need -= take;
+      }
+      if (available < units) shortages.push({ productId: product.id, name: product.name, available, requested: units });
+    }
+    lines.push({ productId: product.id, name: product.name, units, list, cost, short: available < units });
+    calculatedTotal += list;
+    costTotal += cost;
+  }
+  return { lines, calculatedTotal, costTotal, shortages };
+}
+
+/* ---------- Holds: a practice draft set aside and resumed later (the same idea as held sales) ---------- */
+
+export const listHeldPractices = () => db.getSetting('heldPractices', []);
+
+/** Sets a practice draft aside. draft: { items, charge, patientName, patientPhone, doctorRef, note, customerId, paymentAccountCode }. */
+export function holdPractice(draft) {
+  return db.transaction(async (ctx) => {
+    const row = await ctx.get('settings', 'heldPractices');
+    const entry = { id: db.newId(), savedAt: new Date().toISOString(), ...draft };
+    ctx.put('settings', { key: 'heldPractices', value: [...(row?.value ?? []), entry] });
+    return entry.id;
+  });
+}
+
+async function takeHeldPractice(ctx, id) {
+  const row = await ctx.get('settings', 'heldPractices');
+  const list = row?.value ?? [];
+  const entry = list.find((h) => h.id === id);
+  if (!entry) throw missing('held practice', id);
+  ctx.put('settings', { key: 'heldPractices', value: list.filter((h) => h.id !== id) });
+  return entry;
+}
+
+/** Takes a held draft back out of the list and returns it. */
+export const resumeHeldPractice = (id) => db.transaction((ctx) => takeHeldPractice(ctx, id));
+
+/** Discards a held draft and returns it, so the screen can offer Undo (restoreHeldPractice). */
+export const discardHeldPractice = (id) => db.transaction((ctx) => takeHeldPractice(ctx, id));
+
+/** Puts a discarded draft back at the end of the list. */
+export function restoreHeldPractice(entry) {
+  return db.transaction(async (ctx) => {
+    const row = await ctx.get('settings', 'heldPractices');
+    ctx.put('settings', { key: 'heldPractices', value: [...(row?.value ?? []), entry] });
+  });
+}
+
+/* ---------- Repeat, and recent patients ---------- */
+
+/**
+ * The items of a practice as they can be entered again: the same units per medicine, shown as packs and loose units.
+ * (A practice stores base units, not the unit the cashier chose, so the repeat uses whole packs first.)
+ */
+export async function repeatItemsOf(practiceId) {
+  const { items } = await getPractice(practiceId);
+  const totals = new Map();
+  for (const item of items) totals.set(item.productId, (totals.get(item.productId) ?? 0) + item.qtyUnits);
+  const out = [];
+  for (const [productId, units] of totals) {
+    const product = await db.get('products', productId);
+    if (!product) continue;
+    out.push({ productId, packs: Math.floor(units / product.unitsPerPack), looseUnits: units % product.unitsPerPack });
+  }
+  return out;
+}
+
+/** The most recent non-voided practice, or null. */
+export async function lastActivePractice() {
+  const rows = await listPractices({ includeVoided: false });
+  return rows[0] ?? null;
+}
+
+/** Patient names and phones from the latest practices, most recent first, without repeats. */
+export async function recentPatients(limit = 30) {
+  const rows = (await listPractices({ includeVoided: true })).slice(0, 300);
+  const seen = new Set();
+  const out = [];
+  for (const row of rows) {
+    const name = row.patientName.trim();
+    if (!name || seen.has(name.toLowerCase())) continue;
+    seen.add(name.toLowerCase());
+    out.push({ name, phone: row.patientPhone });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/** Practice totals over [from, to] (YYYY-MM-DD, inclusive), from the daily rollup. Voided practices are already excluded. */
+export async function practiceTotals({ from = '', to = '\uffff' } = {}) {
+  const days = await db.getAll('dailyPractice', { query: IDBKeyRange.bound(from, to) });
+  const total = { count: 0, charged: 0, cost: 0, profit: 0 };
+  for (const day of days) {
+    total.count += day.count;
+    total.charged += day.charged;
+    total.cost += day.cost;
+    total.profit += day.profit;
+  }
+  return { ...total, margin: total.charged > 0 ? total.profit / total.charged : null };
 }

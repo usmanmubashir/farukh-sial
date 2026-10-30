@@ -143,7 +143,7 @@ Batch expiry alerts, customer credit limits, and backup/restore metadata will be
 
 ## Practice (approved; services implemented)
 
-Status: approved with the ten recommendations. The services step is implemented: schema version 6, the two accounts, the ledger lines, the stock movements, the practice rollup, `js/services/practice.js` (create, void, read, kits) and tests in `tests/services.test.html` (group "practice"). Still to build: the Practice screen, the dashboard donut, the reports, the Settings controls and the Urdu screens.
+Status: approved with the ten recommendations. The services step is implemented: schema version 6, the two accounts, the ledger lines, the stock movements, the practice rollup, `js/services/practice.js` (create, void, read, kits) and tests in `tests/services.test.html` (group "practice"). Built since: the Practice screen (`#/practice`, with holds, kits, repeat last, undo after save, and the slip), the history page (`#/practice-list`, with owner void), the dashboard tile and the Ctrl+K entries. Still to build: the dashboard donut, the reports, the Settings controls for the practice rules, the camera scan on the Practice screen, and a native-speaker review of the Urdu.
 
 ### Implementation notes (what the code does)
 

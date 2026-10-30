@@ -30,6 +30,8 @@ const ROUTES = [
 
   { path: '/dashboard', nav: 'daily', label: 'nav.home', icon: 'home', bottom: 'home', load: page('dashboard') },
   { path: '/pos', nav: 'daily', label: 'nav.newSale', icon: 'cart', bottom: 'sell', load: page('pos') },
+  { path: '/practice', nav: 'daily', label: 'nav.practice', icon: 'pulse', load: page('practice') },
+  { path: '/practice-list', nav: 'daily', label: 'nav.practiceList', icon: 'receipt', load: page('practice-list') },
   { path: '/sales', nav: 'daily', icon: 'receipt', load: page('sales') },
   { path: '/purchases', nav: 'daily', icon: 'purchase', load: page('purchases') },
   { path: '/purchases/new', load: page('purchase-new') },

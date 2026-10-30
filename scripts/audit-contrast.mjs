@@ -81,6 +81,9 @@ const PAIRS = [
   ['danger', 'danger-soft', 4.5, 'error text'],
   ['danger', 'surface', 4.5, 'error text on cards'],
   ['info', 'info-soft', 4.5, 'info badge'],
+  ['practice', 'surface', 4.5, 'practice heading and figures on cards'],
+  ['practice', 'practice-soft', 4.5, 'practice header text'],
+  ['on-brand', 'practice', 4.5, 'practice save button label'],
   ['focus', 'surface', 3, 'focus ring on cards (non-text)'],
   ['control-border', 'surface', 3, 'input and control outline on cards (non-text)'],
 ];

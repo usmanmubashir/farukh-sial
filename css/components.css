@@ -578,6 +578,7 @@ select {
 .tile[data-accent="teal"] { --accent: var(--accent-teal); --accent-grad: var(--accent-teal-grad); --accent-glow: var(--accent-teal-glow); --accent-soft: var(--accent-teal-soft); }
 .tile[data-accent="purple"] { --accent: var(--accent-purple); --accent-grad: var(--accent-purple-grad); --accent-glow: var(--accent-purple-glow); --accent-soft: var(--accent-purple-soft); }
 .tile[data-accent="cyan"] { --accent: var(--accent-cyan); --accent-grad: var(--accent-cyan-grad); --accent-glow: var(--accent-cyan-glow); --accent-soft: var(--accent-cyan-soft); }
+.tile[data-accent="practice"] { --accent: var(--accent-practice); --accent-grad: var(--accent-practice-grad); --accent-glow: rgb(124 58 237 / 0.35); --accent-soft: var(--c-practice-soft); }
 .tile[data-accent="pink"] { --accent: var(--accent-pink); --accent-grad: var(--accent-pink-grad); --accent-glow: var(--accent-pink-glow); --accent-soft: var(--accent-pink-soft); }
 .tile[data-accent="amber"] { --accent: var(--accent-amber); --accent-grad: var(--accent-amber-grad); --accent-glow: var(--accent-amber-glow); --accent-soft: var(--accent-amber-soft); }
 
