@@ -61,11 +61,17 @@ export async function createUser({ username, password, confirm, sections }) {
   return id;
 }
 
-/** Changes a staff account's sections and/or whether it is active. */
-export async function updateUser(id, { sections, active } = {}) {
+/** Changes a staff account's username, screens and/or whether it is active. */
+export async function updateUser(id, { username, sections, active } = {}) {
   await requireOwner();
   const record = await staffRecord(id);
   const patch = { ...record, updatedAt: Date.now() };
+  if (username !== undefined) {
+    const name = String(username).trim().toLowerCase();
+    if (!USERNAME_RULE.test(name)) throw new AuthError('usernameInvalid');
+    if ((await db.getAll('users')).some((other) => other.id !== id && other.username === name)) throw new AuthError('usernameTaken');
+    patch.username = name;
+  }
   if (sections !== undefined) {
     const granted = sanitizeSections(sections);
     if (!granted.length) throw new AuthError('noSections');

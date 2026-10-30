@@ -17,25 +17,25 @@ export const title = 'nav.home';
 const can = (section) => canOpen(store.get('access'), section);
 
 const TILES = [
-  { key: 'sell', path: '/pos', section: 'sales', accent: 'green', icon: 'cart' },
+  { key: 'sell', path: '/pos', section: 'pos', accent: 'green', icon: 'cart' },
   { key: 'buy', path: '/purchases', section: 'purchases', accent: 'blue', icon: 'purchase' },
-  { key: 'expiry', path: '/expiry', section: 'medicines', accent: 'orange', icon: 'clock' },
-  { key: 'stock', path: '/stock', section: 'medicines', accent: 'teal', icon: 'stock' },
-  { key: 'orderList', path: '/demand', section: 'medicines', accent: 'purple', icon: 'order' },
-  { key: 'batchTrace', path: '/trace', section: 'medicines', accent: 'cyan', icon: 'batch' },
-  { key: 'rxRegister', path: '/rx', section: 'medicines', accent: 'pink', icon: 'rx' },
-  { key: 'customers', path: '/customers', section: 'parties', accent: 'amber', icon: 'customers' },
+  { key: 'expiry', path: '/expiry', section: 'expiry', accent: 'orange', icon: 'clock' },
+  { key: 'stock', path: '/stock', section: 'stock', accent: 'teal', icon: 'stock' },
+  { key: 'orderList', path: '/demand', section: 'demand', accent: 'purple', icon: 'order' },
+  { key: 'batchTrace', path: '/trace', section: 'trace', accent: 'cyan', icon: 'batch' },
+  { key: 'rxRegister', path: '/rx', section: 'rx', accent: 'pink', icon: 'rx' },
+  { key: 'customers', path: '/customers', section: 'customers', accent: 'amber', icon: 'customers' },
   { key: 'practice', path: '/practice', section: 'practice', accent: 'practice', icon: 'pulse' },
 ];
 
 const MORE = [
-  { key: 'medicines', path: '/products', section: 'medicines', icon: 'products' },
+  { key: 'medicines', path: '/products', section: 'products', icon: 'products' },
   { key: 'sales', path: '/sales', section: 'sales', icon: 'receipt' },
   { key: 'purchases', path: '/purchases', section: 'purchases', icon: 'purchase' },
-  { key: 'suppliers', path: '/suppliers', section: 'parties', icon: 'suppliers' },
-  { key: 'returns', path: '/returns', section: 'sales', icon: 'returns' },
-  { key: 'cashBook', path: '/vouchers', section: 'accounts', icon: 'bank' },
-  { key: 'practiceList', path: '/practice-list', section: 'practice', icon: 'receipt' },
+  { key: 'suppliers', path: '/suppliers', section: 'suppliers', icon: 'suppliers' },
+  { key: 'returns', path: '/returns', section: 'returns', icon: 'returns' },
+  { key: 'cashBook', path: '/vouchers', section: 'vouchers', icon: 'bank' },
+  { key: 'practiceList', path: '/practice-list', section: 'practice-list', icon: 'receipt' },
   { key: 'reports', path: '/reports', section: 'reports', icon: 'reports' },
   { key: 'settings', path: '/settings', section: 'settings', icon: 'settings' },
 ];
@@ -219,7 +219,7 @@ function lists(d) {
     : `<p class="muted small">${esc(i18n.t('recent.empty'))}</p>`;
   const cards = [
     can('sales') && `<div class="card"><div class="block-head"><h2>${esc(i18n.t('top.title'))}</h2></div>${top}</div>`,
-    can('medicines') && `<div class="card"><div class="block-head"><h2>${esc(i18n.t('expiringSoon.title'))}</h2><a class="small" href="#/expiry">${esc(i18n.t('seeAll'))}</a></div>${expiring}</div>`,
+    can('expiry') && `<div class="card"><div class="block-head"><h2>${esc(i18n.t('expiringSoon.title'))}</h2><a class="small" href="#/expiry">${esc(i18n.t('seeAll'))}</a></div>${expiring}</div>`,
     can('sales') && `<div class="card"><div class="block-head"><h2>${esc(i18n.t('recent.title'))}</h2><a class="small" href="#/sales">${esc(i18n.t('seeAll'))}</a></div>${recent}</div>`,
   ].filter(Boolean);
   if (!cards.length) return '';
@@ -237,11 +237,11 @@ function markup(d) {
       </header>
       ${can('sales') ? hero(d) : ''}
       ${can('backup') ? backupNudge(d) : ''}
-      ${can('medicines') ? attention(d) : ''}
+      ${can('expiry') || can('stock') || can('demand') ? attention(d) : ''}
       ${can('sales') && can('practice') ? mix.html() : ''}
       ${tiles()}
       ${more()}
-      ${can('accounts') ? overview(d) : ''}
+      ${can('vouchers') ? overview(d) : ''}
       ${can('sales') ? chart(d) : ''}
       ${lists(d)}
     </div>`;

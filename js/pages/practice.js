@@ -404,9 +404,7 @@ async function paintInsights() {
   const totals = await practiceTotals({ from: today, to: today });
   const $strip = $host.find('.practice-insights');
   $strip.html(`
-    <span class="pr-insight"><span class="muted small">${esc(t('practice.todayCount'))}</span><strong>${esc(totals.count)}</strong></span>
-    <span class="pr-insight"><span class="muted small">${esc(t('practice.todayCharged'))}</span><strong>${money(totals.charged)}</strong></span>
-    ${settings?.practiceShowCost !== false ? `<span class="pr-insight ${totals.profit >= 0 ? 'is-profit' : 'is-loss'}"><span class="muted small">${esc(totals.profit >= 0 ? t('practice.todayProfit') : t('practice.todayLoss'))}</span><strong>${money(Math.abs(totals.profit))}</strong></span>` : ''}`);
+    <span class="pr-insight"><span class="muted small">${esc(t('practice.todayCharged'))}</span><strong>${money(totals.charged)}</strong></span>`);
   anim.scanCounts($strip[0]);
 }
 

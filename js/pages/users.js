@@ -1,24 +1,27 @@
-// Users: the owner adds staff accounts and chooses the sections each one can open. Only the owner can open this page
-// (the route names the owner-only 'users' section), and the service checks the owner again on every write.
+// Users: the owner adds staff accounts, edits their username, screens and status, and resets their password.
+// The permissions list shows every screen in the sidebar, grouped as the sidebar is. Only the owner can open this page
+// (the route names the owner-only 'users' screen), and the service checks the owner again on every write.
 import * as ui from '../core/ui.js';
 import { esc, icon } from '../core/ui.js';
 import { t } from '../core/i18n.js';
 import { AuthError } from '../core/auth.js';
-import { GRANTABLE_SECTIONS } from '../core/access.js';
+import { OWNER_SCREEN, SCREENS } from '../core/access.js';
 import * as users from '../services/users.js';
 
 export const route = '/users';
 export const title = 'nav.users';
 
+const GROUPS = ['daily', 'medicines', 'parties', 'accounts', 'admin'];
 let $host = null;
 let rows = [];
 
-const sectionLabel = (key) => t(`access.section.${key}`);
+const screenLabel = (screen) => t(screen.label);
 
 function sectionsText(user) {
   if (user.role === 'owner') return t('access.allSections');
   if (!user.sections.length) return t('access.noSectionsYet');
-  return user.sections.map(sectionLabel).join(' · ');
+  const labels = SCREENS.filter((screen) => user.sections.includes(screen.key)).map(screenLabel);
+  return labels.join(' · ');
 }
 
 function cardHtml(user) {
@@ -41,12 +44,21 @@ function cardHtml(user) {
     </article>`;
 }
 
-function sectionBoxes(selected) {
+/** One checkbox per sidebar screen, grouped as the sidebar is. The owner-only screen is shown but cannot be ticked. */
+function screenBoxes(selected) {
+  const box = (screen) => `<label class="user-check"><input type="checkbox" name="section" value="${esc(screen.key)}"${selected.includes(screen.key) ? ' checked' : ''}> <span>${esc(screenLabel(screen))}</span></label>`;
+  const ownerBox = `<label class="user-check is-locked"><input type="checkbox" disabled checked> <span>${esc(screenLabel(OWNER_SCREEN))}</span> <span class="muted small">${esc(t('access.ownerOnly'))}</span></label>`;
   return `<fieldset class="user-sections">
     <legend>${esc(t('users.sections'))}</legend>
-    ${GRANTABLE_SECTIONS.map(
-      (key) => `<label class="user-check"><input type="checkbox" name="section" value="${esc(key)}"${selected.includes(key) ? ' checked' : ''}> <span>${esc(sectionLabel(key))}</span></label>`,
-    ).join('')}
+    ${GROUPS.map((group) => {
+      const screens = SCREENS.filter((screen) => screen.group === group);
+      const extra = group === 'admin' ? ownerBox : '';
+      if (!screens.length && !extra) return '';
+      return `<div class="user-group">
+        <h4 class="user-group-title">${esc(t(`nav.group.${group}`))}</h4>
+        <div class="user-group-checks">${screens.map(box).join('')}${extra}</div>
+      </div>`;
+    }).join('')}
   </fieldset>`;
 }
 
@@ -56,7 +68,7 @@ function formHtml(user) {
     <form class="user-form" novalidate>
       <div class="field">
         <label for="uf-name">${esc(t('users.username'))}</label>
-        <input id="uf-name" type="text" autocomplete="off" value="${esc(user?.username ?? '')}"${isNew ? '' : ' readonly'}>
+        <input id="uf-name" type="text" autocomplete="off" value="${esc(user?.username ?? '')}">
       </div>
       <div class="field">
         <label for="uf-pass">${esc(t(isNew ? 'users.password' : 'users.newPassword'))}</label>
@@ -66,7 +78,7 @@ function formHtml(user) {
         <label for="uf-confirm">${esc(t('settings.confirmPassword'))}</label>
         <input id="uf-confirm" type="password" autocomplete="new-password">
       </div>
-      ${sectionBoxes(user?.sections ?? [])}
+      ${screenBoxes(user?.sections ?? [])}
       ${isNew ? '' : `<label class="user-check"><input type="checkbox" id="uf-active"${user.active ? ' checked' : ''}> <span>${esc(t('access.active'))}</span></label>`}
       <p class="form-error" role="alert" hidden></p>
     </form>`;
@@ -83,7 +95,7 @@ function readForm(form) {
   };
 }
 
-/** Saves the form. A new account is created; an existing one gets its access and, when a password is typed, a new one. */
+/** Saves the form. A new account is created; an existing one gets its username, screens and status and, when a password is typed, a new one. */
 async function save(user, body, modal) {
   const $error = body.find('.form-error');
   const values = readForm(body[0]);
@@ -92,7 +104,7 @@ async function save(user, body, modal) {
       await users.createUser(values);
       ui.toast(t('users.created'), { type: 'success' });
     } else {
-      await users.updateUser(user.id, { sections: values.sections, active: values.active });
+      await users.updateUser(user.id, { username: values.username, sections: values.sections, active: values.active });
       if (values.password) await users.resetPassword(user.id, values);
       ui.toast(t('users.saved'), { type: 'success' });
     }

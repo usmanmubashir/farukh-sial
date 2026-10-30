@@ -1352,8 +1352,9 @@
 
     async function accessGroup() {
       // The pure rules.
-      eq('the owner has every grantable section and users', accessOf({ role: 'owner' }).sections.length, 11);
-      eq('sections are kept once each, in order, and unknown keys are dropped', sanitizeSections(['reports', 'sales', 'sales', 'bogus']), ['sales', 'reports']);
+      eq('the owner has every screen in the sidebar, users included', accessOf({ role: 'owner' }).sections.length, 21);
+      eq('screens are kept once each, in sidebar order, and unknown keys are dropped', sanitizeSections(['reports', 'pos', 'pos', 'bogus']), ['pos', 'reports']);
+      eq('an old section key expands to the screens it covered', sanitizeSections(['sales']), ['pos', 'sales', 'returns']);
       eq('users can never be granted to staff', sanitizeSections(['users']), []);
       ok('a granted section can be opened', canOpen(accessOf({ role: 'staff', sections: ['sales'] }), 'sales'));
       ok('an ungranted section cannot be opened', !canOpen(accessOf({ role: 'staff', sections: ['sales'] }), 'reports'));
@@ -1368,7 +1369,7 @@
       const clerkId = await users.createUser({ username: 'Asif.Clerk', password: 'clerk-pass-1', confirm: 'clerk-pass-1', sections: ['sales', 'medicines', 'users', 'bogus'] });
       const listed = await users.listUsers();
       eq('the owner is listed first, then staff by name', listed.map((u) => u.username), ['owner', 'asif.clerk']);
-      eq('a new staff account keeps only grantable sections', listed[1].sections, ['sales', 'medicines']);
+      eq('a new staff account keeps only grantable screens', listed[1].sections, ['pos', 'sales', 'returns', 'products', 'stock', 'expiry', 'demand', 'trace', 'rx']);
       ok('the list never carries the password hash or salt', !('hash' in listed[1]) && !('salt' in listed[1]));
       await fails('a username is used once', () => users.createUser({ username: 'asif.clerk', password: 'clerk-pass-2', confirm: 'clerk-pass-2', sections: ['sales'] }), 'usernameTaken');
       await fails('a username is 3 to 32 plain characters', () => users.createUser({ username: 'a b', password: 'clerk-pass-1', confirm: 'clerk-pass-1', sections: ['sales'] }), 'usernameInvalid');
@@ -1380,7 +1381,7 @@
       await fails('a wrong password is refused for staff', () => auth.login('asif.clerk', 'not-the-pass'), 'wrongCredentials');
       await auth.login('asif.clerk', 'clerk-pass-1');
       const me = await auth.currentUser();
-      eq('the staff session has its role and sections', [me.role, me.sections], ['staff', ['sales', 'medicines']]);
+      eq('the staff session has its role and screens', [me.role, me.sections], ['staff', ['pos', 'sales', 'returns', 'products', 'stock', 'expiry', 'demand', 'trace', 'rx']]);
       await fails('staff cannot add users', () => users.createUser({ username: 'other.user', password: 'clerk-pass-1', confirm: 'clerk-pass-1', sections: ['sales'] }), 'ownerOnly');
       await fails('staff cannot list users', () => users.listUsers(), 'ownerOnly');
       await fails('staff cannot change access', () => users.updateUser(clerkId, { sections: ['reports'] }), 'ownerOnly');

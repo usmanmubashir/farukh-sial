@@ -33,28 +33,28 @@ const ROUTES = [
   { path: '/forbidden', chrome: true, load: page('forbidden') },
 
   { path: '/dashboard', nav: 'daily', section: 'dashboard', label: 'nav.home', icon: 'home', bottom: 'home', load: page('dashboard') },
-  { path: '/pos', nav: 'daily', section: 'sales', label: 'nav.newSale', icon: 'cart', bottom: 'sell', load: page('pos') },
+  { path: '/pos', nav: 'daily', section: 'pos', label: 'nav.newSale', icon: 'cart', bottom: 'sell', load: page('pos') },
   { path: '/practice', nav: 'daily', section: 'practice', label: 'nav.practice', icon: 'pulse', load: page('practice') },
-  { path: '/practice-list', nav: 'daily', section: 'practice', label: 'nav.practiceList', icon: 'receipt', load: page('practice-list') },
+  { path: '/practice-list', nav: 'daily', section: 'practice-list', label: 'nav.practiceList', icon: 'receipt', load: page('practice-list') },
   { path: '/sales', nav: 'daily', section: 'sales', icon: 'receipt', load: page('sales') },
   { path: '/purchases', nav: 'daily', section: 'purchases', icon: 'purchase', load: page('purchases') },
   { path: '/purchases/new', section: 'purchases', load: page('purchase-new') },
-  { path: '/returns', nav: 'daily', section: 'sales', icon: 'returns', load: page('returns') },
-  { path: '/returns/new', section: 'sales', load: page('return-new') },
+  { path: '/returns', nav: 'daily', section: 'returns', icon: 'returns', load: page('returns') },
+  { path: '/returns/new', section: 'returns', load: page('return-new') },
 
-  { path: '/products', nav: 'medicines', section: 'medicines', label: 'nav.products', icon: 'products', load: page('products') },
-  { path: '/stock', nav: 'medicines', section: 'medicines', icon: 'stock', bottom: 'stock', load: page('stock') },
-  { path: '/expiry', nav: 'medicines', section: 'medicines', icon: 'clock', bottom: 'expiry', load: page('expiry') },
-  { path: '/demand', nav: 'medicines', section: 'medicines', label: 'nav.demand', icon: 'order', load: page('demand') },
-  { path: '/trace', nav: 'medicines', section: 'medicines', label: 'nav.batchTrace', icon: 'batch', load: page('batchtrace') },
-  { path: '/rx', nav: 'medicines', section: 'medicines', label: 'nav.rxRegister', icon: 'rx', load: page('rxregister') },
+  { path: '/products', nav: 'medicines', section: 'products', label: 'nav.products', icon: 'products', load: page('products') },
+  { path: '/stock', nav: 'medicines', section: 'stock', icon: 'stock', bottom: 'stock', load: page('stock') },
+  { path: '/expiry', nav: 'medicines', section: 'expiry', icon: 'clock', bottom: 'expiry', load: page('expiry') },
+  { path: '/demand', nav: 'medicines', section: 'demand', label: 'nav.demand', icon: 'order', load: page('demand') },
+  { path: '/trace', nav: 'medicines', section: 'trace', label: 'nav.batchTrace', icon: 'batch', load: page('batchtrace') },
+  { path: '/rx', nav: 'medicines', section: 'rx', label: 'nav.rxRegister', icon: 'rx', load: page('rxregister') },
 
-  { path: '/customers', nav: 'parties', section: 'parties', icon: 'customers', load: page('customers') },
-  { path: '/customers/:id', section: 'parties', load: page('customer-detail') },
-  { path: '/suppliers', nav: 'parties', section: 'parties', icon: 'suppliers', load: page('suppliers') },
-  { path: '/suppliers/:id', section: 'parties', load: page('supplier-detail') },
+  { path: '/customers', nav: 'parties', section: 'customers', icon: 'customers', load: page('customers') },
+  { path: '/customers/:id', section: 'customers', load: page('customer-detail') },
+  { path: '/suppliers', nav: 'parties', section: 'suppliers', icon: 'suppliers', load: page('suppliers') },
+  { path: '/suppliers/:id', section: 'suppliers', load: page('supplier-detail') },
 
-  { path: '/vouchers', nav: 'accounts', section: 'accounts', label: 'nav.cashBook', icon: 'bank', load: page('vouchers') },
+  { path: '/vouchers', nav: 'accounts', section: 'vouchers', label: 'nav.cashBook', icon: 'bank', load: page('vouchers') },
   { path: '/accounts', nav: 'accounts', section: 'accounts', label: 'nav.ledger', icon: 'ledger', load: page('accounts') },
   { path: '/accounts/:code', section: 'accounts', load: page('accounts') },
   { path: '/reports/:key', section: 'reports', load: page('reports') },
@@ -363,7 +363,7 @@ function openCommandPalette() {
       if (!q) return pages;
       const matches = pages.filter((item) => item.label.toLowerCase().includes(q));
       // Medicine matches are shown only to users who can open a section that lists medicines.
-      const canSeeMedicines = canOpen(access, 'medicines') || canOpen(access, 'sales');
+      const canSeeMedicines = canOpen(access, 'products') || canOpen(access, 'pos');
       if (q.length >= 2 && canSeeMedicines) {
         const { searchProducts } = await import('./services/products.js');
         const products = await searchProducts(q, { limit: 8 });
