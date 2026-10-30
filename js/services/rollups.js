@@ -39,6 +39,7 @@ export function ledgerGroup(docType, memo = '') {
     sale: 'sales', purchase: 'purchases', receipt: 'receipts', payment: 'payments', expense: 'expenses',
     income: 'incomes', transfer: 'transfers', saleReturn: 'returns', purchaseReturn: 'returns', opening: 'other',
     void: 'other',
+    practice: 'practice', practiceVoid: 'practice',
   };
   if (map[docType]) return map[docType];
   const legacy = { RCV: 'receipts', PAY: 'payments', TRF: 'transfers' }[String(memo ?? '').slice(0, 3)];
@@ -85,6 +86,7 @@ export function saleDeltas(sale, items, sign = 1) {
 const EMPTY_DAY = (date) => ({ date, invoices: 0, subtotal: 0, discount: 0, tax: 0, total: 0, cost: 0, profit: 0, cash: 0, bank: 0, credit: 0 });
 const EMPTY_PRODUCT = (key, date, productId, productName) => ({ key, date, productId, productName, units: 0, lines: 0, amount: 0, net: 0, cost: 0, profit: 0 });
 const EMPTY_CASH = (key, accountCode, date, group) => ({ key, accountCode, date, group, debit: 0, credit: 0 });
+const EMPTY_PRACTICE = (date) => ({ date, count: 0, charged: 0, cost: 0, profit: 0 });
 
 /** Adds a delta to a row, creating the row first if it does not exist. Keeps every other field. */
 async function addTo(ctx, store, key, base, delta) {
@@ -105,6 +107,16 @@ export async function applySale(ctx, sale, items, sign = 1) {
   }
 }
 
+/** Applies a practice (sign +1) or its void (sign −1) to the practice rollup, on the practice's own date. */
+export async function applyPractice(ctx, practice, sign = 1) {
+  await addTo(ctx, 'dailyPractice', practice.date, EMPTY_PRACTICE(practice.date), {
+    count: sign,
+    charged: sign * practice.chargedAmount,
+    cost: sign * practice.costTotal,
+    profit: sign * practice.profit,
+  });
+}
+
 /** Applies one cash-account line. Only the cash account (1000) has a rollup. */
 export async function applyCashLine(ctx, { accountCode, date, group, debit = 0, credit = 0 }) {
   if (accountCode !== '1000') return;
@@ -123,6 +135,7 @@ export function rebuildRollups() {
     ctx.clear('dailySales');
     ctx.clear('dailyProducts');
     ctx.clear('dailyLedger');
+    ctx.clear('dailyPractice');
 
     const itemsBySale = new Map();
     for (const item of await ctx.getAll('saleItems')) {
@@ -161,6 +174,19 @@ export function rebuildRollups() {
       cash.set(key, row);
     }
 
+    // Practices: every practice that has no void event, grouped by its own date.
+    const voided = new Set((await ctx.getAll('practiceVoids')).map((v) => v.practiceId));
+    const practiceDays = new Map();
+    for (const p of await ctx.getAll('practices')) {
+      if (voided.has(p.id)) continue;
+      const row = practiceDays.get(p.date) ?? EMPTY_PRACTICE(p.date);
+      row.count += 1;
+      row.charged += p.chargedAmount;
+      row.cost += p.costTotal;
+      row.profit += p.profit;
+      practiceDays.set(p.date, row);
+    }
+    for (const row of practiceDays.values()) ctx.put('dailyPractice', row);
     for (const row of days.values()) ctx.put('dailySales', row);
     for (const row of products.values()) ctx.put('dailyProducts', row);
     for (const row of cash.values()) ctx.put('dailyLedger', row);

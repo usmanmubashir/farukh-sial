@@ -22,6 +22,7 @@
     <script type="module">
       import * as db from '../js/core/db.js';
       import { ensureRollups } from '../js/services/rollups.js';
+      import { seedDefaultAccounts } from '../js/services/ledger.js';
 
       const NAME = 'shifa-migration-test';
       db.useDatabase(NAME);
@@ -93,6 +94,10 @@
         check('version 3 stores exist (rollups)', (await db.count('dailySales')) >= 0 && (await db.count('dailyLedger')) >= 0);
         check('version 4 store exists (tombstones)', (await db.count('tombstones')) === 0);
         check('version 5 store exists (errorLog)', (await db.count('errorLog')) >= 0);
+        check('version 6 stores exist (practices, practiceItems, practiceVoids, practiceKits, dailyPractice)', (await db.count('practices')) === 0 && (await db.count('practiceItems')) === 0 && (await db.count('practiceVoids')) === 0 && (await db.count('practiceKits')) === 0 && (await db.count('dailyPractice')) === 0);
+        // The app seeds its system accounts on every boot; the test does the same after the upgrade.
+        await seedDefaultAccounts();
+        check('the upgrade adds the practice accounts without touching existing accounts', (await db.get('accounts', 'acc-4300'))?.code === '4300' && (await db.get('accounts', 'acc-5300'))?.code === '5300' && (await db.get('accounts', 'acc-1000'))?.code === '1000');
         check('rows written before sync get a legacy stamp', typeof product?.stamp === 'string' && product.stamp.endsWith('.legacy'), product?.stamp);
         check('outbox entries from before sync get an opId', outbox.length === 1 && typeof outbox[0].opId === 'string' && outbox[0].opId.endsWith('.legacy'));
         check('new writes after the upgrade are stamped with this device', await (async () => {

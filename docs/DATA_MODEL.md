@@ -141,9 +141,19 @@ Popular medicines (`js/services/seed-medicines.js`) import without prices. Impor
 
 Batch expiry alerts, customer credit limits, and backup/restore metadata will be added as new migrations (`migrations[1]` and later). Existing migrations are not edited.
 
-## Practice (PROPOSED, not implemented yet)
+## Practice (approved; services implemented)
 
-Status: a proposal for review. Nothing below is in the code yet. Once approved, the schema, migration and ledger lines are built as described here, and this section is updated to match what was built.
+Status: approved with the ten recommendations. The services step is implemented: schema version 6, the two accounts, the ledger lines, the stock movements, the practice rollup, `js/services/practice.js` (create, void, read, kits) and tests in `tests/services.test.html` (group "practice"). Still to build: the Practice screen, the dashboard donut, the reports, the Settings controls and the Urdu screens.
+
+### Implementation notes (what the code does)
+
+- `practiceItems` has one row per batch allocation. `unitType` is the unit the cashier chose for the line (`pack`, or `loose` when the line has loose units). `qtyUnits` is always in base units.
+- `listPrice` and `costPerUnit` are rounded per unit. `lineList` and `lineCost` are exact: the list price of a line is split across its batches, and the last batch takes the rounding.
+- A void posts its reverse on the day it is made (`voidDate`). The practice rollup, however, is reduced on the practice's own date, so the day it was earned stays correct.
+- Rx and controlled items write an `rxRegister` row with `source: "practice"`, `practiceId` and `saleId: null`.
+- Settings added: `allowBackdating` (false), `practiceWarnBelowCost` (true), `practicePrintListPrice` (false), `practiceShowCost` (true), `practiceDefaultAccount` ('1000'). Document prefix `practice`: 'PRC'.
+- Errors: `backdatingNotAllowed`, `practiceCustomerRequired`, `practiceAlreadyVoided`, `emptyPractice`, and the existing `insufficientStock`, `patientDoctorRequired`, `required` (empty void reason).
+- Sync: the four practice stores are synced. `practices.number` and `practiceVoids.practiceId` are unique, and a clash is reported as a sync issue.
 
 A **practice** is medicine given to a patient at the owner's discretion, with a charge the owner decides. It is not a sale. It is kept in its own stores, its own income account and its own cost account, so sales profit and practice profit can be reported apart.
 

@@ -30,6 +30,9 @@ export const ACCOUNT = {
   purchaseReturns: '5100',
   cogs: '5200',
   generalExpenses: '6000',
+  // Practice (schema 6): income from practices and their cost of goods, kept apart from sales.
+  practiceIncome: '4300',
+  practiceCost: '5300',
 };
 
 /** System accounts. Fixed ids, so every device seeds the same rows. They cannot be deleted. */
@@ -48,6 +51,8 @@ export const DEFAULT_ACCOUNTS = [
   { id: 'acc-5100', code: '5100', key: 'account.purchaseReturns', type: 'expense', normal: 'credit' },
   { id: 'acc-5200', code: '5200', key: 'account.costOfGoodsSold', type: 'expense', normal: 'debit' },
   { id: 'acc-6000', code: '6000', key: 'account.generalExpenses', type: 'expense', normal: 'debit' },
+  { id: 'acc-4300', code: '4300', key: 'account.practiceIncome', type: 'income', normal: 'credit', system: true },
+  { id: 'acc-5300', code: '5300', key: 'account.costOfPractice', type: 'expense', normal: 'debit', system: true },
 ];
 
 /** Payment kinds: where money physically sits. */
@@ -266,6 +271,22 @@ export function saleLines({ receipts, paid, paidBank = 0, paidCash, balance, net
     { account: ACCOUNT.sales, credit: net },
     { account: ACCOUNT.salesTax, credit: tax },
     { account: ACCOUNT.cogs, debit: cost },
+    { account: ACCOUNT.inventory, credit: cost },
+  ];
+}
+
+/**
+ * Practice: money in (cash, bank, wallet, or the customer's receivable on udhaar) against Practice Income, and the
+ * FEFO cost moves Inventory → Cost of Practice. A zero charge posts only the cost; zero lines are dropped by postEntryIn.
+ */
+export function practiceLines({ charged, cost, paymentAccountCode, customerId = null }) {
+  const money = paymentAccountCode === ACCOUNT.receivable
+    ? { account: ACCOUNT.receivable, debit: charged, partyId: customerId }
+    : { account: paymentAccountCode, debit: charged };
+  return [
+    money,
+    { account: ACCOUNT.practiceIncome, credit: charged },
+    { account: ACCOUNT.practiceCost, debit: cost },
     { account: ACCOUNT.inventory, credit: cost },
   ];
 }

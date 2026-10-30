@@ -41,6 +41,7 @@
     import * as reportDefs from '../js/pages/_report-defs.js';
     import * as backup from '../js/services/backup.js';
     import * as trace from '../js/services/trace.js';
+    import * as practice from '../js/services/practice.js';
 
     db.useDatabase('shifa-services-test');
 
@@ -1060,6 +1061,123 @@
       eq('whole book balances after restore', (await ledger.trialBalance()).balanced, true);
     }
 
+    /* ---------- 15. practice ---------- */
+
+    async function practiceGroup() {
+      await resetDb();
+      const pan = await products.createProduct({ name: 'Panadol 500mg', code: 'PN5', class: 'otc', soldAs: 'strip', unitsPerPack: 10, looseSelling: true, looseUnitPrice: 800, costPerPack: 5000, salePricePerPack: 8000 });
+      const ris = await products.createProduct({ name: 'Risek', code: 'RSK', class: 'otc', soldAs: 'strip', unitsPerPack: 10, costPerPack: 5000, salePricePerPack: 8000 });
+      const aug = await products.createProduct({ name: 'Augmentin 625mg', code: 'AUG', class: 'rx', soldAs: 'strip', unitsPerPack: 10, costPerPack: 9000, salePricePerPack: 12000 });
+      // Two Panadol batches: the first to expire is used first (FEFO).
+      await stock.addBatch({ productId: pan.id, batchNo: 'PN-A', expiry: isoIn(30), packs: 2, costPerPack: 5000, mrp: 8000 });
+      await stock.addBatch({ productId: pan.id, batchNo: 'PN-B', expiry: isoIn(200), packs: 2, costPerPack: 6000, mrp: 8000 });
+      await stock.addBatch({ productId: ris.id, batchNo: 'RS-1', expiry: isoIn(90), packs: 5, costPerPack: 5000, mrp: 8000 });
+      await stock.addBatch({ productId: aug.id, batchNo: 'AG-1', expiry: isoIn(90), packs: 3, costPerPack: 9000, mrp: 12000 });
+
+      async function docTotals(docType, docId) {
+        const rows = await db.getAll('ledgerEntries', { index: 'doc', query: [docType, docId] });
+        return { debit: sum(rows.map((r) => r.debit)), credit: sum(rows.map((r) => r.credit)), rows };
+      }
+      const sum = (values) => values.reduce((total, v) => total + v, 0);
+      const accountNet = async (code) => {
+        const rows = (await db.getAll('ledgerEntries')).filter((r) => r.accountCode === code);
+        return sum(rows.map((r) => r.debit - r.credit));
+      };
+
+      // The example from the brief: 3 Panadol + 3 Risek, calculated 480.00, charged 200.00.
+      const p1 = await practice.createPractice({ items: [{ productId: pan.id, packs: 3 }, { productId: ris.id, packs: 3 }], chargedAmount: 20000, patientName: 'Patient A' });
+      eq('first practice numbered PRC-0001', p1.number, 'PRC-0001');
+      eq('calculated total is the sum of quantity × sale price', p1.calculatedTotal, 48000);
+      eq('charged amount is the amount the owner typed', p1.chargedAmount, 20000);
+      eq('cost is the FEFO batch cost (2 × 5000 + 1 × 6000 for Panadol, 3 × 5000 for Risek)', p1.costTotal, 31000);
+      eq('profit = charged − cost', p1.profit, -11000);
+      eq('items follow FEFO across batches', p1.items.map((i) => i.batchNo), ['PN-A', 'PN-B', 'RS-1']);
+      eq('item units per batch', p1.items.map((i) => i.qtyUnits), [20, 10, 30]);
+      eq('the list price of a line is split exactly across its batches', p1.items.filter((i) => i.productId === pan.id).reduce((t, i) => t + i.lineList, 0), 24000);
+      eq('stock after: Panadol 40 → 10 units', await stockUnits(pan.id), 10);
+      eq('stock after: Risek 50 → 20 units', await stockUnits(ris.id), 20);
+      eq('batch PN-A emptied first', await batchUnits(pan.id, 'PN-A'), 0);
+      const t1 = await docTotals('practice', p1.id);
+      eq('practice posts income and cost: debit = credit = 51000', [t1.debit, t1.credit], [51000, 51000]);
+      eq('practice income account gets the charged amount', await accountNet('4300'), -20000);
+      eq('cost of practice account gets the cost', await accountNet('5300'), 31000);
+      eq('the ledger balances after the practice', (await ledger.trialBalance()).balanced, true);
+      eq('a practice creates no sale', (await sales.listSales()).length, 0);
+
+      // Zero charge: only the cost posts, and the loss is the whole cost.
+      const free = await practice.createPractice({ items: [{ productId: ris.id, packs: 1 }], chargedAmount: 0 });
+      eq('second practice numbered PRC-0002', free.number, 'PRC-0002');
+      eq('zero charge: profit is minus the cost', free.profit, -5000);
+      const t2 = await docTotals('practice', free.id);
+      eq('zero charge posts only the cost (two lines)', t2.rows.length, 2);
+      eq('zero charge posts no income', t2.rows.some((r) => r.accountCode === '4300'), false);
+      eq('the ledger still balances with a zero charge', (await ledger.trialBalance()).balanced, true);
+
+      // Void: exact batches come back, and the ledger gets the exact reverse.
+      const voided = await practice.voidPractice(p1.id, { reason: 'Entered by mistake' });
+      eq('void is recorded with its reason', voided.reason, 'Entered by mistake');
+      eq('stock is restored exactly: Panadol back to 40 units', await stockUnits(pan.id), 40);
+      eq('batch PN-A back to 20 units', await batchUnits(pan.id, 'PN-A'), 20);
+      eq('batch PN-B back to 20 units', await batchUnits(pan.id, 'PN-B'), 20);
+      const tv = await docTotals('practiceVoid', p1.id);
+      eq('void posts the reverse: debit = credit = 51000', [tv.debit, tv.credit], [51000, 51000]);
+      eq('after void, practice income nets to zero', await accountNet('4300'), 0);
+      eq('after void, cost of practice keeps only the free practice', await accountNet('5300'), 5000);
+      eq('the ledger balances after the void', (await ledger.trialBalance()).balanced, true);
+      eq('the voided practice is listed as voided', (await practice.getPractice(p1.id)).voided, true);
+      await fails('a practice can be voided once', () => practice.voidPractice(p1.id, { reason: 'again' }), 'practiceAlreadyVoided');
+      await fails('a void needs a reason', () => practice.voidPractice(free.id, { reason: '  ' }), 'required');
+      eq('the second practice is still active', (await practice.getPractice(free.id)).voided, false);
+
+      // Shortage, and expired batches are never used.
+      await fails('more than the stock is refused', () => practice.createPractice({ items: [{ productId: pan.id, packs: 5 }] }), 'insufficientStock');
+      await stock.addBatch({ productId: pan.id, batchNo: 'OLD', expiry: isoIn(-5), packs: 4, costPerPack: 1000, mrp: 8000 });
+      const fefo = await practice.createPractice({ items: [{ productId: pan.id, packs: 1 }] });
+      eq('an expired batch is never used', fefo.items.some((i) => i.batchNo === 'OLD'), false);
+      eq('the earliest sellable batch is used', fefo.items[0].batchNo, 'PN-A');
+
+      // Rx: patient and doctor are required, and the register shows the practice.
+      await fails('Rx practice needs patient and doctor', () => practice.createPractice({ items: [{ productId: aug.id, packs: 1 }], patientName: 'X' }), 'patientDoctorRequired');
+      const rx = await practice.createPractice({ items: [{ productId: aug.id, packs: 1 }], patientName: 'Patient B', doctorRef: 'Dr. Khan' });
+      const rxRows = (await db.getAll('rxRegister')).filter((r) => r.practiceId === rx.id);
+      eq('Rx practice appears in the Rx register, tagged practice', rxRows.map((r) => r.source), ['practice']);
+
+      // Udhaar: needs a customer, then the receivable takes the charge.
+      await fails('udhaar practice needs a customer', () => practice.createPractice({ items: [{ productId: pan.id, packs: 1 }], paymentAccountCode: '1100', chargedAmount: 8000 }), 'practiceCustomerRequired');
+      const cust = await parties.addParty({ kind: 'customer', name: 'Udhaar Customer' });
+      const ud = await practice.createPractice({ items: [{ productId: pan.id, packs: 1 }], paymentAccountCode: '1100', customerId: cust.id, chargedAmount: 8000 });
+      const tu = await docTotals('practice', ud.id);
+      eq('udhaar debits the receivable for the customer', tu.rows.some((r) => r.accountCode === '1100' && r.debit === 8000 && r.partyId === cust.id), true);
+
+      // Backdating: refused until the owner allows it.
+      const yesterday = isoIn(-1);
+      await fails('backdating is refused by default', () => practice.createPractice({ items: [{ productId: ris.id, packs: 1 }], date: yesterday, today }), 'backdatingNotAllowed');
+      await settings.saveSettings({ allowBackdating: true });
+      const back = await practice.createPractice({ items: [{ productId: ris.id, packs: 1 }], date: yesterday, today });
+      eq('a backdated practice keeps its own date', back.date, yesterday);
+      await settings.saveSettings({ allowBackdating: false });
+
+      // Rollup: the online figures equal a full rebuild.
+      const figures = async () => JSON.stringify((await db.getAll('dailyPractice')).sort((a, b) => a.date.localeCompare(b.date)).map(({ updatedAt, ...row }) => row));
+      const before = await figures();
+      await rollups.rebuildRollups();
+      const after = await figures();
+      eq('practice rollups agree with a full rebuild', after, before);
+      const todayRow = await db.get('dailyPractice', today);
+      eq("today's rollup counts the active practices (no voided)", todayRow.count, 4);
+
+      // Kits.
+      const kit = await practice.saveKit({ name: 'Fever kit', items: [{ productId: pan.id, packs: 1 }, { productId: ris.id, packs: 1 }] });
+      eq('kit saved by name', (await practice.listKits()).map((k) => k.name), ['Fever kit']);
+      await fails('an empty kit is refused', () => practice.saveKit({ name: 'Empty', items: [] }), 'emptyPractice');
+      await practice.deleteKit(kit.id);
+      eq('kit deleted', (await practice.listKits()).length, 0);
+
+      // Numbering continues per practice.
+      eq('numbers are sequential and never reused', [p1.number, free.number, fefo.number, rx.number, ud.number, back.number], ['PRC-0001', 'PRC-0002', 'PRC-0003', 'PRC-0004', 'PRC-0005', 'PRC-0006']);
+      eq('the whole book balances at the end', (await ledger.trialBalance()).balanced, true);
+    }
+
     /* ---------- runner ---------- */
 
     const groups = [
@@ -1077,6 +1195,7 @@
       ['reports: pure maths', reportsPureGroup],
       ['reports: rollups agree with the sales', reportsRollupGroup],
       ['backup: restore gives identical reports', backupGroup],
+      ['practice', practiceGroup],
     ];
 
     const list = document.getElementById('results');

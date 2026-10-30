@@ -173,7 +173,7 @@ async function applyPage(ops, cursor) {
   return result;
 }
 
-const SALES_LEDGER = ['sales', 'saleItems', 'ledgerEntries'];
+const SALES_LEDGER = ['sales', 'saleItems', 'ledgerEntries', 'practices', 'practiceVoids'];
 const needsRollups = (touched) => SALES_LEDGER.some((store) => touched.has(store));
 
 function noteIssues(issues) {

@@ -40,6 +40,16 @@ export const DEFAULT_SETTINGS = {
   printAutoPrint: false,
   /** 'western' (0–9, default) or 'urdu' (۰–۹) for displayed numbers. */
   numberDigits: 'western',
+  /** Practice (medicine given at the owner's charge). Backdating is off unless the owner allows it. */
+  allowBackdating: false,
+  /** Show a non-blocking warning when a practice is charged less than its cost. */
+  practiceWarnBelowCost: true,
+  /** Show the list price on the practice slip. Off by default: the slip shows only the charged amount. */
+  practicePrintListPrice: false,
+  /** Show the cost of each practice to the signed-in owner. */
+  practiceShowCost: true,
+  /** Account that receives practice payments by default (cash). 1100 means on the customer's account. */
+  practiceDefaultAccount: '1000',
   docPrefixes: {
     sale: 'SALE',
     purchase: 'PUR',
@@ -51,6 +61,7 @@ export const DEFAULT_SETTINGS = {
     adjustment: 'ADJ',
     expense: 'EXP',
     income: 'INC',
+    practice: 'PRC',
   },
 };
 

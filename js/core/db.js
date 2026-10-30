@@ -12,6 +12,8 @@ export const SYNCED_STORES = [
   'products', 'batches', 'stockMovements', 'customers', 'suppliers',
   'sales', 'saleItems', 'purchases', 'purchaseItems', 'returns', 'returnItems',
   'accounts', 'ledgerEntries', 'vouchers', 'demandList', 'rxRegister',
+  // Practice (schema 6): immutable documents, append-only voids, kits.
+  'practices', 'practiceItems', 'practiceVoids', 'practiceKits',
 ];
 
 /**
@@ -19,15 +21,22 @@ export const SYNCED_STORES = [
  * tombstones is sync state: one row per deleted synced row, so an older copy arriving later cannot bring it back.
  * It is included in backups and snapshots.
  */
-export const LOCAL_STORES = ['settings', 'counters', 'outbox', 'syncState', 'users', 'dailySales', 'dailyProducts', 'dailyLedger', 'tombstones', 'errorLog'];
+export const LOCAL_STORES = ['settings', 'counters', 'outbox', 'syncState', 'users', 'dailySales', 'dailyProducts', 'dailyLedger', 'dailyPractice', 'tombstones', 'errorLog'];
 
 const ALL_STORES = [...SYNCED_STORES, ...LOCAL_STORES];
 
 /** Primary key field per store. Everything else uses "id". */
 const KEY_FIELD = {
   settings: 'key', counters: 'key', syncState: 'key', outbox: 'seq',
-  dailySales: 'date', dailyProducts: 'key', dailyLedger: 'key',
+  dailySales: 'date', dailyProducts: 'key', dailyLedger: 'key', dailyPractice: 'date',
 };
+
+/** Synced stores as they were at schema version 4. Used only by the version 4 migration. */
+const SYNCED_STORES_V4 = [
+  'products', 'batches', 'stockMovements', 'customers', 'suppliers',
+  'sales', 'saleItems', 'purchases', 'purchaseItems', 'returns', 'returnItems',
+  'accounts', 'ledgerEntries', 'vouchers', 'demandList', 'rxRegister',
+];
 
 /**
  * Schema migrations. migrations[n] upgrades the database from version n to n + 1.
@@ -133,7 +142,8 @@ const migrations = [
   // Rows and outbox entries written before this version get stamps from their own times, so they order correctly.
   (db, tx) => {
     db.createObjectStore('tombstones', { keyPath: 'id' });
-    for (const name of SYNCED_STORES) {
+    // The stores that existed at version 4. Frozen here: a migration must not read today's list, which grows.
+    for (const name of SYNCED_STORES_V4) {
       stampExisting(tx.objectStore(name), (row) => ({ stamp: legacyStamp(row.updatedAt, 0) }));
     }
     stampExisting(tx.objectStore('outbox'), (row) => ({ opId: legacyStamp(row.createdAt, row.seq), stamp: legacyStamp(row.createdAt, row.seq) }));
@@ -142,6 +152,24 @@ const migrations = [
   (db) => {
     const log = db.createObjectStore('errorLog', { keyPath: 'id' });
     log.createIndex('at', 'at');
+  },
+  // v6: Practice. Medicine given to a patient at the owner's own charge, kept apart from sales.
+  // practices: one immutable document per practice. practiceItems: one row per batch allocation.
+  // practiceVoids: append-only void events (at most one per practice, enforced by the unique index).
+  // practiceKits: saved item sets. dailyPractice: local daily rollup, rebuilt from practices and voids.
+  (db) => {
+    const practices = db.createObjectStore('practices', { keyPath: 'id' });
+    practices.createIndex('number', 'number', { unique: true });
+    practices.createIndex('date', 'date');
+    const items = db.createObjectStore('practiceItems', { keyPath: 'id' });
+    items.createIndex('practiceId', 'practiceId');
+    items.createIndex('productId', 'productId');
+    items.createIndex('batchId', 'batchId');
+    const voids = db.createObjectStore('practiceVoids', { keyPath: 'id' });
+    voids.createIndex('practiceId', 'practiceId', { unique: true });
+    const kits = db.createObjectStore('practiceKits', { keyPath: 'id' });
+    kits.createIndex('name', 'nameKey');
+    db.createObjectStore('dailyPractice', { keyPath: 'date' });
   },
 ];
 
