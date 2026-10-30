@@ -2253,6 +2253,66 @@
   }
 }
 
+/* Users: one card per account, and the section checklist in the add and edit dialog. */
+
+.user-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: var(--space-3);
+  margin-block: var(--space-3);
+}
+
+.user-card {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.user-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.user-name {
+  overflow-wrap: anywhere;
+}
+
+.user-scope {
+  color: var(--c-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.user-form {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.user-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-md);
+}
+
+.user-sections legend {
+  padding-inline: var(--space-1);
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+.user-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  color: var(--c-text);
+}
+
 /* Practice reports: KPI tiles, medal badges, voided and loss rows, trend charts and ranked bars. */
 
 .rpt-kpi-grid {

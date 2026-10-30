@@ -6,6 +6,7 @@ import * as store from './core/store.js';
 import * as events from './core/events.js';
 import { createRouter, navigate } from './core/router.js';
 import * as auth from './core/auth.js';
+import { accessOf, canOpen } from './core/access.js';
 import * as sync from './core/sync.js';
 import * as ui from './core/ui.js';
 import * as anim from './core/anim.js';
@@ -20,6 +21,7 @@ const page = (name) => () => import(`./pages/${name}.js`);
 /**
  * Route table.
  *   guard: 'setup' | 'guest' | 'auth' (default) | 'public'
+ *   section: the access section a user needs to open the route (see core/access.js). No section: any signed-in user.
  *   chrome: false hides the shell. dev: only on local development hosts.
  *   nav: group key for the sidebar (daily, medicines, parties, accounts, admin). bottom: 'home' | 'stock' |
  *   'sell' (floating centre button) | 'expiry'. label: i18n key for the nav text (default nav.<name>).
@@ -28,36 +30,39 @@ const ROUTES = [
   { path: '/setup', guard: 'setup', chrome: false, load: page('setup') },
   { path: '/login', guard: 'guest', chrome: false, load: page('login') },
 
-  { path: '/dashboard', nav: 'daily', label: 'nav.home', icon: 'home', bottom: 'home', load: page('dashboard') },
-  { path: '/pos', nav: 'daily', label: 'nav.newSale', icon: 'cart', bottom: 'sell', load: page('pos') },
-  { path: '/practice', nav: 'daily', label: 'nav.practice', icon: 'pulse', load: page('practice') },
-  { path: '/practice-list', nav: 'daily', label: 'nav.practiceList', icon: 'receipt', load: page('practice-list') },
-  { path: '/sales', nav: 'daily', icon: 'receipt', load: page('sales') },
-  { path: '/purchases', nav: 'daily', icon: 'purchase', load: page('purchases') },
-  { path: '/purchases/new', load: page('purchase-new') },
-  { path: '/returns', nav: 'daily', icon: 'returns', load: page('returns') },
-  { path: '/returns/new', load: page('return-new') },
+  { path: '/forbidden', chrome: true, load: page('forbidden') },
 
-  { path: '/products', nav: 'medicines', label: 'nav.products', icon: 'products', load: page('products') },
-  { path: '/stock', nav: 'medicines', icon: 'stock', bottom: 'stock', load: page('stock') },
-  { path: '/expiry', nav: 'medicines', icon: 'clock', bottom: 'expiry', load: page('expiry') },
-  { path: '/demand', nav: 'medicines', label: 'nav.demand', icon: 'order', load: page('demand') },
-  { path: '/trace', nav: 'medicines', label: 'nav.batchTrace', icon: 'batch', load: page('batchtrace') },
-  { path: '/rx', nav: 'medicines', label: 'nav.rxRegister', icon: 'rx', load: page('rxregister') },
+  { path: '/dashboard', nav: 'daily', section: 'dashboard', label: 'nav.home', icon: 'home', bottom: 'home', load: page('dashboard') },
+  { path: '/pos', nav: 'daily', section: 'sales', label: 'nav.newSale', icon: 'cart', bottom: 'sell', load: page('pos') },
+  { path: '/practice', nav: 'daily', section: 'practice', label: 'nav.practice', icon: 'pulse', load: page('practice') },
+  { path: '/practice-list', nav: 'daily', section: 'practice', label: 'nav.practiceList', icon: 'receipt', load: page('practice-list') },
+  { path: '/sales', nav: 'daily', section: 'sales', icon: 'receipt', load: page('sales') },
+  { path: '/purchases', nav: 'daily', section: 'purchases', icon: 'purchase', load: page('purchases') },
+  { path: '/purchases/new', section: 'purchases', load: page('purchase-new') },
+  { path: '/returns', nav: 'daily', section: 'sales', icon: 'returns', load: page('returns') },
+  { path: '/returns/new', section: 'sales', load: page('return-new') },
 
-  { path: '/customers', nav: 'parties', icon: 'customers', load: page('customers') },
-  { path: '/customers/:id', load: page('customer-detail') },
-  { path: '/suppliers', nav: 'parties', icon: 'suppliers', load: page('suppliers') },
-  { path: '/suppliers/:id', load: page('supplier-detail') },
+  { path: '/products', nav: 'medicines', section: 'medicines', label: 'nav.products', icon: 'products', load: page('products') },
+  { path: '/stock', nav: 'medicines', section: 'medicines', icon: 'stock', bottom: 'stock', load: page('stock') },
+  { path: '/expiry', nav: 'medicines', section: 'medicines', icon: 'clock', bottom: 'expiry', load: page('expiry') },
+  { path: '/demand', nav: 'medicines', section: 'medicines', label: 'nav.demand', icon: 'order', load: page('demand') },
+  { path: '/trace', nav: 'medicines', section: 'medicines', label: 'nav.batchTrace', icon: 'batch', load: page('batchtrace') },
+  { path: '/rx', nav: 'medicines', section: 'medicines', label: 'nav.rxRegister', icon: 'rx', load: page('rxregister') },
 
-  { path: '/vouchers', nav: 'accounts', label: 'nav.cashBook', icon: 'bank', load: page('vouchers') },
-  { path: '/accounts', nav: 'accounts', label: 'nav.ledger', icon: 'ledger', load: page('accounts') },
-  { path: '/accounts/:code', load: page('accounts') },
-  { path: '/reports/:key', load: page('reports') },
-  { path: '/reports', nav: 'accounts', icon: 'reports', load: page('reports') },
+  { path: '/customers', nav: 'parties', section: 'parties', icon: 'customers', load: page('customers') },
+  { path: '/customers/:id', section: 'parties', load: page('customer-detail') },
+  { path: '/suppliers', nav: 'parties', section: 'parties', icon: 'suppliers', load: page('suppliers') },
+  { path: '/suppliers/:id', section: 'parties', load: page('supplier-detail') },
 
-  { path: '/backup', nav: 'admin', label: 'nav.backup', icon: 'backup', load: page('backup') },
-  { path: '/settings', nav: 'admin', icon: 'settings', load: page('settings') },
+  { path: '/vouchers', nav: 'accounts', section: 'accounts', label: 'nav.cashBook', icon: 'bank', load: page('vouchers') },
+  { path: '/accounts', nav: 'accounts', section: 'accounts', label: 'nav.ledger', icon: 'ledger', load: page('accounts') },
+  { path: '/accounts/:code', section: 'accounts', load: page('accounts') },
+  { path: '/reports/:key', section: 'reports', load: page('reports') },
+  { path: '/reports', nav: 'accounts', section: 'reports', icon: 'reports', load: page('reports') },
+
+  { path: '/backup', nav: 'admin', section: 'backup', label: 'nav.backup', icon: 'backup', load: page('backup') },
+  { path: '/settings', nav: 'admin', section: 'settings', icon: 'settings', load: page('settings') },
+  { path: '/users', nav: 'admin', section: 'users', label: 'nav.users', icon: 'customers', load: page('users') },
 
   { path: '/styleguide', guard: 'public', dev: true, chrome: true, load: page('styleguide') },
 ];
@@ -150,7 +155,15 @@ let wasSyncing = false;
 
 const labelKey = (route) => route.label ?? `nav.${route.path.slice(1)}`;
 
-/** Access rules for every route, run before the page loads. */
+/** The first sidebar page the user may open. A user with no sections at all lands on the no-access page. */
+function homeFor(access) {
+  return ROUTES.find((route) => route.nav && canOpen(access, route.section))?.path ?? '/forbidden';
+}
+
+/**
+ * Access rules for every route, run before the page loads. The user is read again from the users store here,
+ * so a removed, disabled or re-permissioned account takes effect on its next navigation.
+ */
 async function accessGuard(to) {
   if (to.path === '/') return '/dashboard';
   if (to.path === '/new-sale') return '/pos';
@@ -161,11 +174,28 @@ async function accessGuard(to) {
   if (guard === 'setup') return '/login';
 
   const signedIn = await auth.isAuthenticated();
-  if (guard === 'auth' && !signedIn) {
+  const user = signedIn ? await auth.currentUser() : null;
+  if (signedIn && !user) await auth.logout();
+  const access = accessOf(user);
+  store.set('access', access);
+
+  if (guard === 'auth' && !user) {
     return to.path === '/dashboard' ? '/login' : `/login?next=${encodeURIComponent(to.path)}`;
   }
-  if (guard === 'guest' && signedIn) return '/dashboard';
+  if (guard === 'guest' && user) return homeFor(access);
+  if (!canOpen(access, to.route?.section)) {
+    ui.toast(i18n.t('access.denied'), { type: 'error' });
+    return homeFor(access);
+  }
   return undefined;
+}
+
+/** Hides the avatar-menu entries the user cannot open (the Settings entry has data-section="settings"). */
+function applyMenuAccess() {
+  const access = store.get('access');
+  $('#avatar-menu [data-section]').each(function hideIfDenied() {
+    $(this).prop('hidden', !canOpen(access, this.getAttribute('data-section')));
+  });
 }
 
 function setDrawer(open) {
@@ -222,13 +252,15 @@ function highlightNav() {
 }
 
 function renderNav() {
+  const access = store.get('access');
+  const allowed = (route) => canOpen(access, route.section);
   const link = (route, cls, inner = '') =>
     `<a class="${cls}" href="#${route.path}" data-path="${route.path}">${inner || ui.icon(route.icon)}<span>${ui.esc(i18n.t(labelKey(route)))}</span></a>`;
 
   const items = [
     `<li class="nav-indicator" aria-hidden="true"></li>`,
     ...GROUPS.flatMap(([group, titleKey]) => {
-      const routes = ROUTES.filter((route) => route.nav === group);
+      const routes = ROUTES.filter((route) => route.nav === group && allowed(route));
       if (!routes.length) return [];
       return [
         `<li class="nav-group-title" role="presentation">${ui.esc(i18n.t(titleKey))}</li>`,
@@ -238,7 +270,7 @@ function renderNav() {
   ];
   $('#nav-list').html(items.join(''));
 
-  const bottom = BOTTOM.map((key) => ROUTES.find((route) => route.bottom === key))
+  const bottom = BOTTOM.map((key) => ROUTES.find((route) => route.bottom === key && allowed(route)))
     .filter(Boolean)
     .map((route) => {
       if (route.bottom !== 'sell') return `<li>${link(route, 'bottom-link')}</li>`;
@@ -248,6 +280,7 @@ function renderNav() {
     });
   bottom.push(`<li><button type="button" class="bottom-menu" data-action="open-menu">${ui.icon('menu')}<span>${ui.esc(i18n.t('more.title'))}</span></button></li>`);
   $('#bottom-list').html(bottom.join(''));
+  applyMenuAccess();
   highlightNav();
 }
 
@@ -317,7 +350,8 @@ async function logout() {
 
 /** Ctrl+K / Cmd+K: jump to a page, or find a medicine by name, salt, company, barcode or code. */
 function openCommandPalette() {
-  const pages = ROUTES.filter((route) => route.nav).map((route) => ({
+  const access = store.get('access');
+  const pages = ROUTES.filter((route) => route.nav && canOpen(access, route.section)).map((route) => ({
     label: i18n.t(labelKey(route)),
     hint: route.path,
     run: () => navigate(route.path),
@@ -328,7 +362,9 @@ function openCommandPalette() {
       const q = query.trim().toLowerCase();
       if (!q) return pages;
       const matches = pages.filter((item) => item.label.toLowerCase().includes(q));
-      if (q.length >= 2) {
+      // Medicine matches are shown only to users who can open a section that lists medicines.
+      const canSeeMedicines = canOpen(access, 'medicines') || canOpen(access, 'sales');
+      if (q.length >= 2 && canSeeMedicines) {
         const { searchProducts } = await import('./services/products.js');
         const products = await searchProducts(q, { limit: 8 });
         matches.push(
@@ -360,6 +396,7 @@ function bindShell() {
     renderAvatar();
   });
   store.subscribe('session', renderAvatar);
+  store.subscribe('access', renderNav);
   store.subscribe('syncPending', renderPill);
   $('#pharmacy-name').text(store.get('pharmacyName') || '');
   events.on('route:loading', (busy) => ui.setBusy(busy));

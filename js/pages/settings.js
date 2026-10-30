@@ -127,13 +127,15 @@ async function printerSection() {
 }
 
 async function accountSection() {
-  const [username, session, deviceId, s] = await Promise.all([auth.ownerUsername(), store.get('session') ?? auth.currentSession(), auth.getDeviceId(), getSettings()]);
+  const [user, session, deviceId, s] = await Promise.all([auth.currentUser(), store.get('session') ?? auth.currentSession(), auth.getDeviceId(), getSettings()]);
+  const username = user?.username ?? '';
+  const roleText = t(user?.role === 'owner' ? 'settings.roleOwner' : 'settings.roleStaff');
   return section(
     'set-account',
     t('settings.account'),
     `<dl class="doc-totals">
        <div><dt>${esc(t('settings.username'))}</dt><dd>${esc(username)}</dd></div>
-       <div><dt>${esc(t('settings.role'))}</dt><dd>${esc(t('settings.roleOwner'))}</dd></div>
+       <div><dt>${esc(t('settings.role'))}</dt><dd>${esc(roleText)}</dd></div>
        <div><dt>${esc(t('settings.deviceId'))}</dt><dd><code class="code-box">${esc(deviceId)}</code></dd></div>
      </dl>
      <p class="muted small">${esc(t('settings.deviceIdHelp'))}</p>

@@ -4,6 +4,8 @@ import * as anim from '../core/anim.js';
 import * as mix from './_mix-card.js';
 import * as events from '../core/events.js';
 import * as i18n from '../core/i18n.js';
+import * as store from '../core/store.js';
+import { canOpen } from '../core/access.js';
 import { formatDate, todayISO } from '../core/dates.js';
 import { esc, icon } from '../core/ui.js';
 import { getDashboard } from '../services/dashboard.js';
@@ -11,28 +13,31 @@ import { getDashboard } from '../services/dashboard.js';
 export const route = '/dashboard';
 export const title = 'nav.home';
 
+/** Whether the signed-in user may see figures from a section. Each block shows only what its section owns. */
+const can = (section) => canOpen(store.get('access'), section);
+
 const TILES = [
-  { key: 'sell', path: '/pos', accent: 'green', icon: 'cart' },
-  { key: 'buy', path: '/purchases', accent: 'blue', icon: 'purchase' },
-  { key: 'expiry', path: '/expiry', accent: 'orange', icon: 'clock' },
-  { key: 'stock', path: '/stock', accent: 'teal', icon: 'stock' },
-  { key: 'orderList', path: '/demand', accent: 'purple', icon: 'order' },
-  { key: 'batchTrace', path: '/trace', accent: 'cyan', icon: 'batch' },
-  { key: 'rxRegister', path: '/rx', accent: 'pink', icon: 'rx' },
-  { key: 'customers', path: '/customers', accent: 'amber', icon: 'customers' },
-  { key: 'practice', path: '/practice', accent: 'practice', icon: 'pulse' },
+  { key: 'sell', path: '/pos', section: 'sales', accent: 'green', icon: 'cart' },
+  { key: 'buy', path: '/purchases', section: 'purchases', accent: 'blue', icon: 'purchase' },
+  { key: 'expiry', path: '/expiry', section: 'medicines', accent: 'orange', icon: 'clock' },
+  { key: 'stock', path: '/stock', section: 'medicines', accent: 'teal', icon: 'stock' },
+  { key: 'orderList', path: '/demand', section: 'medicines', accent: 'purple', icon: 'order' },
+  { key: 'batchTrace', path: '/trace', section: 'medicines', accent: 'cyan', icon: 'batch' },
+  { key: 'rxRegister', path: '/rx', section: 'medicines', accent: 'pink', icon: 'rx' },
+  { key: 'customers', path: '/customers', section: 'parties', accent: 'amber', icon: 'customers' },
+  { key: 'practice', path: '/practice', section: 'practice', accent: 'practice', icon: 'pulse' },
 ];
 
 const MORE = [
-  { key: 'medicines', path: '/products', icon: 'products' },
-  { key: 'sales', path: '/sales', icon: 'receipt' },
-  { key: 'purchases', path: '/purchases', icon: 'purchase' },
-  { key: 'suppliers', path: '/suppliers', icon: 'suppliers' },
-  { key: 'returns', path: '/returns', icon: 'returns' },
-  { key: 'cashBook', path: '/vouchers', icon: 'bank' },
-  { key: 'practiceList', path: '/practice-list', icon: 'receipt' },
-  { key: 'reports', path: '/reports', icon: 'reports' },
-  { key: 'settings', path: '/settings', icon: 'settings' },
+  { key: 'medicines', path: '/products', section: 'medicines', icon: 'products' },
+  { key: 'sales', path: '/sales', section: 'sales', icon: 'receipt' },
+  { key: 'purchases', path: '/purchases', section: 'purchases', icon: 'purchase' },
+  { key: 'suppliers', path: '/suppliers', section: 'parties', icon: 'suppliers' },
+  { key: 'returns', path: '/returns', section: 'sales', icon: 'returns' },
+  { key: 'cashBook', path: '/vouchers', section: 'accounts', icon: 'bank' },
+  { key: 'practiceList', path: '/practice-list', section: 'practice', icon: 'receipt' },
+  { key: 'reports', path: '/reports', section: 'reports', icon: 'reports' },
+  { key: 'settings', path: '/settings', section: 'settings', icon: 'settings' },
 ];
 
 const RING_LENGTH = 2 * Math.PI * 28;
@@ -123,11 +128,13 @@ function attention(d) {
 }
 
 function tiles() {
+  const shown = TILES.filter((t) => can(t.section));
+  if (!shown.length) return '';
   return `
     <section class="dash-block" data-anim="rise">
       <h2>${esc(i18n.t('tiles.title'))}</h2>
       <div class="tile-grid">
-        ${TILES.map(
+        ${shown.map(
           (t) => `
           <a class="tile" data-accent="${t.accent}" data-tilt href="#${t.path}">
             <span class="tile-icon">${icon(t.icon)}</span>
@@ -140,11 +147,13 @@ function tiles() {
 }
 
 function more() {
+  const shown = MORE.filter((m) => can(m.section));
+  if (!shown.length) return '';
   return `
     <section class="dash-block" data-anim="rise">
       <h2>${esc(i18n.t('more.title'))}</h2>
       <div class="more-grid">
-        ${MORE.map((m) => `<a class="more-item" href="#${m.path}">${icon(m.icon)}<span>${esc(i18n.t(`more.${m.key}`))}</span></a>`).join('')}
+        ${shown.map((m) => `<a class="more-item" href="#${m.path}">${icon(m.icon)}<span>${esc(i18n.t(`more.${m.key}`))}</span></a>`).join('')}
       </div>
     </section>`;
 }
@@ -208,12 +217,14 @@ function lists(d) {
         .map((s) => `<li><span>${esc(s.number)} <span class="muted small">${esc(formatDate(s.date))}</span></span>${money(s.total)}</li>`)
         .join('')}</ul>`
     : `<p class="muted small">${esc(i18n.t('recent.empty'))}</p>`;
+  const cards = [
+    can('sales') && `<div class="card"><div class="block-head"><h2>${esc(i18n.t('top.title'))}</h2></div>${top}</div>`,
+    can('medicines') && `<div class="card"><div class="block-head"><h2>${esc(i18n.t('expiringSoon.title'))}</h2><a class="small" href="#/expiry">${esc(i18n.t('seeAll'))}</a></div>${expiring}</div>`,
+    can('sales') && `<div class="card"><div class="block-head"><h2>${esc(i18n.t('recent.title'))}</h2><a class="small" href="#/sales">${esc(i18n.t('seeAll'))}</a></div>${recent}</div>`,
+  ].filter(Boolean);
+  if (!cards.length) return '';
   return `
-    <section class="dash-lists" data-anim="rise">
-      <div class="card"><div class="block-head"><h2>${esc(i18n.t('top.title'))}</h2></div>${top}</div>
-      <div class="card"><div class="block-head"><h2>${esc(i18n.t('expiringSoon.title'))}</h2><a class="small" href="#/expiry">${esc(i18n.t('seeAll'))}</a></div>${expiring}</div>
-      <div class="card"><div class="block-head"><h2>${esc(i18n.t('recent.title'))}</h2><a class="small" href="#/sales">${esc(i18n.t('seeAll'))}</a></div>${recent}</div>
-    </section>`;
+    <section class="dash-lists" data-anim="rise">${cards.join('')}</section>`;
 }
 
 function markup(d) {
@@ -224,14 +235,14 @@ function markup(d) {
         <h1>${esc(d.pharmacyName || i18n.t('nav.home'))}</h1>
         <p class="muted small">${esc(i18n.t('greet.sub', { pharmacy: d.pharmacyName || '' }))}</p>
       </header>
-      ${hero(d)}
-      ${backupNudge(d)}
-      ${attention(d)}
-      ${mix.html()}
+      ${can('sales') ? hero(d) : ''}
+      ${can('backup') ? backupNudge(d) : ''}
+      ${can('medicines') ? attention(d) : ''}
+      ${can('sales') && can('practice') ? mix.html() : ''}
       ${tiles()}
       ${more()}
-      ${overview(d)}
-      ${chart(d)}
+      ${can('accounts') ? overview(d) : ''}
+      ${can('sales') ? chart(d) : ''}
       ${lists(d)}
     </div>`;
 }

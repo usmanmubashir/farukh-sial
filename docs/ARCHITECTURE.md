@@ -97,6 +97,15 @@ The router calls `destroy()` on the previous page before it renders the next one
 - Sessions are stored in `settings` with a 24-hour expiry. The guard checks `isAuthenticated()`. An expired session still counts as signed in while offline, and forces a new login once the device is back online.
 - Device ID: generated once at boot and shown in Settings.
 
+## Users and section access (`js/core/access.js`, `js/services/users.js`, `js/pages/users.js`)
+
+- Users are the owner (`id: 'owner'`, always every section) and staff accounts the owner adds on the Users screen. Each staff account has a set of sections it may open: Home, Sales, Purchases, Practice, Medicines, Customers and suppliers, Cash book and ledger, Reports, Backup and Settings. The Users section itself is owner-only and can never be granted.
+- Every route in `js/app.js` names its `section`. The sidebar, the bottom bar, the avatar menu, the Ctrl+K palette and the dashboard blocks show only what the user may open.
+- The router guard reads the user from the users store on every navigation. A URL for a section the user may not open (typed, bookmarked or pasted) is redirected to the user's first permitted page with a message. A user with no sections lands on the no-access page.
+- Staff management is checked in the service, not only on the screen: `js/services/users.js` requires the signed-in user to be the owner before any write, and never returns hashes.
+- Changes apply on the user's next navigation. A user who is removed or disabled is signed out at that point.
+- These checks control what the app shows and where it sends a user. They are not encryption: whoever can open the device's browser storage can read the data.
+
 ## Sync (`js/core/sync.js`, `js/core/sync-supabase.js`, `js/services/replication.js`)
 
 Full design in [SYNC.md](SYNC.md); the database side in [DATA_MODEL.md](DATA_MODEL.md).

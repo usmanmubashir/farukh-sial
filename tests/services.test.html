@@ -45,6 +45,9 @@
     import * as donut from '../js/core/donut.js';
     import * as dashboardService from '../js/services/dashboard.js';
     import * as practiceReports from '../js/services/practice-reports.js';
+    import * as auth from '../js/core/auth.js';
+    import * as users from '../js/services/users.js';
+    import { accessOf, canOpen, sanitizeSections } from '../js/core/access.js';
 
     db.useDatabase('shifa-services-test');
 
@@ -1345,6 +1348,69 @@
       eq('top sellers from practice count only the kept practice (Panadol 10 units, not 30)', fromPractice.rows.find((r) => r.name === 'Panadol 500mg')?.units, 10);
     }
 
+    /* ---------- 19. users and access ---------- */
+
+    async function accessGroup() {
+      // The pure rules.
+      eq('the owner has every grantable section and users', accessOf({ role: 'owner' }).sections.length, 11);
+      eq('sections are kept once each, in order, and unknown keys are dropped', sanitizeSections(['reports', 'sales', 'sales', 'bogus']), ['sales', 'reports']);
+      eq('users can never be granted to staff', sanitizeSections(['users']), []);
+      ok('a granted section can be opened', canOpen(accessOf({ role: 'staff', sections: ['sales'] }), 'sales'));
+      ok('an ungranted section cannot be opened', !canOpen(accessOf({ role: 'staff', sections: ['sales'] }), 'reports'));
+      ok('a route with no section is open to any signed-in user', canOpen(accessOf({ role: 'staff', sections: [] }), undefined));
+      ok('no access means no section', !canOpen(null, 'sales'));
+
+      // Accounts, through the services.
+      await resetDb();
+      await auth.setupOwner({ pharmacyName: 'Test Pharmacy', username: 'Owner', password: 'owner-pass-1', confirm: 'owner-pass-1' });
+      eq('the owner is signed in with the owner role', (await auth.currentUser())?.role, 'owner');
+
+      const clerkId = await users.createUser({ username: 'Asif.Clerk', password: 'clerk-pass-1', confirm: 'clerk-pass-1', sections: ['sales', 'medicines', 'users', 'bogus'] });
+      const listed = await users.listUsers();
+      eq('the owner is listed first, then staff by name', listed.map((u) => u.username), ['owner', 'asif.clerk']);
+      eq('a new staff account keeps only grantable sections', listed[1].sections, ['sales', 'medicines']);
+      ok('the list never carries the password hash or salt', !('hash' in listed[1]) && !('salt' in listed[1]));
+      await fails('a username is used once', () => users.createUser({ username: 'asif.clerk', password: 'clerk-pass-2', confirm: 'clerk-pass-2', sections: ['sales'] }), 'usernameTaken');
+      await fails('a username is 3 to 32 plain characters', () => users.createUser({ username: 'a b', password: 'clerk-pass-1', confirm: 'clerk-pass-1', sections: ['sales'] }), 'usernameInvalid');
+      await fails('a new account needs at least one section', () => users.createUser({ username: 'empty.user', password: 'clerk-pass-1', confirm: 'clerk-pass-1', sections: ['users'] }), 'noSections');
+      await fails('a password is at least 8 characters', () => users.createUser({ username: 'short.pass', password: 'abc', confirm: 'abc', sections: ['sales'] }), 'passwordShort');
+
+      // Signing in as staff: the session carries its role and sections; a wrong password is refused.
+      await auth.logout();
+      await fails('a wrong password is refused for staff', () => auth.login('asif.clerk', 'not-the-pass'), 'wrongCredentials');
+      await auth.login('asif.clerk', 'clerk-pass-1');
+      const me = await auth.currentUser();
+      eq('the staff session has its role and sections', [me.role, me.sections], ['staff', ['sales', 'medicines']]);
+      await fails('staff cannot add users', () => users.createUser({ username: 'other.user', password: 'clerk-pass-1', confirm: 'clerk-pass-1', sections: ['sales'] }), 'ownerOnly');
+      await fails('staff cannot list users', () => users.listUsers(), 'ownerOnly');
+      await fails('staff cannot change access', () => users.updateUser(clerkId, { sections: ['reports'] }), 'ownerOnly');
+      await auth.changePassword({ current: 'clerk-pass-1', password: 'clerk-pass-2', confirm: 'clerk-pass-2' });
+      await auth.logout();
+      await auth.login('asif.clerk', 'clerk-pass-2');
+      await auth.logout();
+
+      // Back as the owner: change access, disable, re-enable, reset the password, then delete.
+      await auth.login('owner', 'owner-pass-1');
+      await users.updateUser(clerkId, { sections: ['reports'] });
+      eq('an access change is stored', (await users.listUsers())[1].sections, ['reports']);
+      await users.updateUser(clerkId, { active: false });
+      await auth.logout();
+      await fails('a disabled account cannot sign in', () => auth.login('asif.clerk', 'clerk-pass-2'), 'accountDisabled');
+      await auth.login('owner', 'owner-pass-1');
+      await users.updateUser(clerkId, { active: true });
+      await users.resetPassword(clerkId, { password: 'clerk-pass-3', confirm: 'clerk-pass-3' });
+      await auth.logout();
+      await auth.login('asif.clerk', 'clerk-pass-3');
+      await auth.logout();
+      await auth.login('owner', 'owner-pass-1');
+      await fails('the owner account cannot be changed here', () => users.deleteUser('owner'), 'ownerProtected');
+      await users.deleteUser(clerkId);
+      eq('a deleted account is gone', (await users.listUsers()).map((u) => u.username), ['owner']);
+      await auth.logout();
+      await fails('a deleted account cannot sign in', () => auth.login('asif.clerk', 'clerk-pass-3'), 'wrongCredentials');
+      await auth.login('owner', 'owner-pass-1');
+    }
+
     const groups = [
       ['products', productsGroup],
       ['stock and FEFO', stockGroup],
@@ -1365,6 +1431,7 @@
       ['dashboard: sales vs practice donut', donutGroup],
       ['practice reports: periods and helpers', periodsAndHelpersGroup],
       ['practice reports: from the database', practiceReportsGroup],
+      ['users and access', accessGroup],
     ];
 
     const list = document.getElementById('results');

@@ -4,6 +4,9 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 
 ## [Unreleased]
 
+### Added
+- Users and section access. The owner adds staff accounts on the new Users screen and chooses which sections each one may open. The sidebar, bottom bar, menus, command palette and dashboard show only those sections, and a typed or bookmarked address for any other section sends the user to their first permitted page. Staff can change their own password; the owner can reset a staff password, disable or delete an account.
+
 ## [1.2.0] - 2026-10-29
 
 ### Added

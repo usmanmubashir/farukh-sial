@@ -51,7 +51,7 @@ Every write goes through `db.transaction()`, which also queues synced rows in `o
 | dailyProducts | key (`date\|productId`) | date | no | Rollup, one row per day and medicine: `units`, `lines`, `amount`, `net` (net of tax, allocated per line), `cost`, `profit` |
 | dailyLedger | key (`accountCode\|date\|group`) | accountCode | no | Rollup of the cash account (1000) per day and kind of movement: `debit`, `credit` |
 | outbox | seq (auto) | status | no | `{ store, op: 'put' \| 'delete', key, record?, status, createdAt, attempts }` |
-| users | id | username (unique) | no | Owner account: `{ id: 'owner', username, salt, hash, iterations }` |
+| users | id | username (unique) | no | Accounts: the owner (`{ id: 'owner', username, salt, hash, iterations }`) and staff (`{ id, username, salt, hash, iterations, sections[], active, createdAt, updatedAt }`). `sections` lists the sections the staff account may open (see ARCHITECTURE.md, Users and section access). No schema change was needed: the store already existed. |
 
 Every synced row also carries `updatedAt` (ISO timestamp), added automatically by `ctx.put`.
 
