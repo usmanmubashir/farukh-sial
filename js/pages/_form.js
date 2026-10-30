@@ -14,12 +14,12 @@ export function brand() {
     </div>`;
 }
 
-export function field({ id, name, label, type = 'text', autocomplete = 'off', hint = '' }) {
+export function field({ id, name, label, type = 'text', autocomplete = 'off', hint = '', value = '' }) {
   const describedBy = hint ? ` aria-describedby="${id}-hint"` : '';
   return `
     <div class="field">
       <label for="${id}">${esc(t(label))}</label>
-      <input id="${id}" name="${name}" type="${type}" autocomplete="${autocomplete}" required${describedBy}>
+      <input id="${id}" name="${name}" type="${type}" autocomplete="${autocomplete}" value="${esc(value ?? '')}" required${describedBy}>
       ${hint ? `<span class="hint" id="${id}-hint">${esc(t(hint))}</span>` : ''}
     </div>`;
 }

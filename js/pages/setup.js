@@ -10,7 +10,26 @@ import { brand, field, showError } from './_form.js';
 export const route = '/setup';
 export const title = 'auth.setupTitle';
 
+// The server address and username of the last join, kept on this device so the next visit is one step: only the password.
+// The password itself is never stored.
+const REMEMBER_KEY = 'shifa.joinServer';
+function remembered() {
+  try {
+    return JSON.parse(localStorage.getItem(REMEMBER_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+function remember(values) {
+  try {
+    localStorage.setItem(REMEMBER_KEY, JSON.stringify({ url: values.url, username: values.username }));
+  } catch {
+    // Private windows may refuse storage: the join still works, it just is not remembered.
+  }
+}
+
 export function render($root) {
+  const known = remembered();
   $root.html(`
     <div class="auth-shell">
       <section class="card auth-card" aria-labelledby="setup-title">
@@ -27,13 +46,13 @@ export function render($root) {
         </form>
 
         <div class="setup-divider"><span>${esc(t('auth.or'))}</span></div>
-        <button type="button" class="btn btn-soft btn-block" id="setup-join-toggle" aria-expanded="false" aria-controls="join-form">${esc(t('auth.joinToggle'))}</button>
+        <button type="button" class="btn btn-soft btn-block" id="setup-join-toggle" aria-expanded="${Boolean(known.url)}" aria-controls="join-form">${esc(t('auth.joinToggle'))}</button>
 
-        <form id="join-form" class="form" novalidate hidden>
+        <form id="join-form" class="form" novalidate${known.url ? '' : ' hidden'}>
           <p class="muted small">${esc(t('auth.joinHelp'))}</p>
           ${field({ id: 'join-pharmacy', name: 'pharmacyName', label: 'auth.pharmacyName', autocomplete: 'organization' })}
-          ${field({ id: 'join-url', name: 'url', label: 'settings.syncUrl', type: 'url', autocomplete: 'url' })}
-          ${field({ id: 'join-user', name: 'username', label: 'auth.username', autocomplete: 'username' })}
+          ${field({ id: 'join-url', name: 'url', label: 'settings.syncUrl', type: 'url', autocomplete: 'url', value: known.url })}
+          ${field({ id: 'join-user', name: 'username', label: 'auth.username', autocomplete: 'username', value: known.username })}
           ${field({ id: 'join-pass', name: 'password', label: 'auth.password', type: 'password', autocomplete: 'current-password' })}
           <p class="form-error" id="join-error" role="alert" hidden></p>
           <button type="submit" class="btn btn-primary btn-block" id="join-submit">${esc(t('auth.joinSubmit'))}</button>
@@ -83,6 +102,7 @@ async function join(event, $root) {
       // The sync engine keeps its own error and retries; show it so the owner knows what to fix.
       throw new Error(sync.getStatus().lastError ?? t('auth.joinNoData'));
     }
+    remember({ url: value('url'), username: value('username') });
     $error.prop('hidden', true);
     navigate('/login');
   } catch (err) {
