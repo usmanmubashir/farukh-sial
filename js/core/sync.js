@@ -22,7 +22,7 @@ const SNAPSHOT_CHUNK = 300;
 /** A device publishes a snapshot once the server has this many ops beyond the last snapshot. */
 const SNAPSHOT_AFTER_OPS = 2000;
 const WRITE_DEBOUNCE_MS = 3000;
-const PERIODIC_MS = 60000;
+const PERIODIC_MS = 15000;
 const MAX_BACKOFF_MS = 5 * 60000;
 const MAX_ISSUES = 50;
 
