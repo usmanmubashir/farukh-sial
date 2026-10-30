@@ -56,4 +56,9 @@ export default {
   'settings.syncUsername': 'Username',
   'settings.syncUsernameHelp': 'The owner or staff username of this pharmacy. The same password as the app.',
   'settings.syncUrlHelpCloudflare': 'The address of your sync Worker, for example https://shifa-sync.your-name.workers.dev. No trailing slash.',
+  'auth.firstVisitTitle': 'Sign in to your pharmacy',
+  'auth.firstVisitSubtitle': 'This device has no pharmacy yet. Sign in with the username and password of your pharmacy, and the data is downloaded from your sync server. Or create a new pharmacy here.',
+  'auth.joinAndLogin': 'Join and sign in',
+  'auth.createNewPharmacy': 'Create a new pharmacy on this device',
+  'auth.joinExistingLink': 'Join an existing pharmacy instead',
 };

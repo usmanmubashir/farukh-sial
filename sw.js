@@ -83,6 +83,7 @@ const SHELL = [
   './js/i18n/ur.js',
   './js/pages/_doc-shared.js',
   './js/pages/_form.js',
+  './js/pages/_join.js',
   './js/pages/_medicine-dialogs.js',
   './js/pages/_medicine-form.js',
   './js/pages/_medicine-shared.js',

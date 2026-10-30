@@ -170,7 +170,8 @@ async function accessGuard(to) {
   if (to.route?.dev) return isDevHost() ? undefined : '/dashboard';
 
   const guard = to.route?.guard ?? 'auth';
-  if (!(await auth.isSetupDone())) return guard === 'setup' ? undefined : '/setup';
+  // A device with no pharmacy yet opens the sign-in screen, which joins one or leads to creating one.
+  if (!(await auth.isSetupDone())) return guard === 'setup' || to.path === '/login' ? undefined : '/login';
   if (guard === 'setup') return '/login';
 
   const signedIn = await auth.isAuthenticated();

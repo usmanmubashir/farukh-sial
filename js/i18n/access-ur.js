@@ -56,4 +56,9 @@ export default {
   'settings.syncUsername': 'صارف نام',
   'settings.syncUsernameHelp': 'اس فارمیسی کا اونر یا عملے کا صارف نام۔ پاس ورڈ وہی جو ایپ کا ہے۔',
   'settings.syncUrlHelpCloudflare': 'آپ کے سنک Worker کا ایڈریس، مثلاً https://shifa-sync.your-name.workers.dev۔ آخر میں / نہ لگائیں۔',
+  'auth.firstVisitTitle': 'اپنی فارمیسی میں سائن ان کریں',
+  'auth.firstVisitSubtitle': 'اس آلے پر ابھی کوئی فارمیسی نہیں۔ فارمیسی کے صارف نام اور پاس ورڈ سے سائن ان کریں، اور ڈیٹا آپ کے سنک سرور سے ڈاؤن لوڈ ہو جائے گا۔ یا یہاں نئی فارمیسی بنائیں۔',
+  'auth.joinAndLogin': 'جڑیں اور سائن ان کریں',
+  'auth.createNewPharmacy': 'اس آلے پر نئی فارمیسی بنائیں',
+  'auth.joinExistingLink': 'اس کے بجائے موجودہ فارمیسی سے جڑیں',
 };
