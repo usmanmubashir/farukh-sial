@@ -22,11 +22,13 @@ import enPractice from '../i18n/practice-en.js';
 import urPractice from '../i18n/practice-ur.js';
 import enPracticeScreen from '../i18n/practice-screen-en.js';
 import urPracticeScreen from '../i18n/practice-screen-ur.js';
+import enMix from '../i18n/mix-en.js';
+import urMix from '../i18n/mix-ur.js';
 import * as store from './store.js';
 
 // Screen strings override the base dictionaries with the same key.
-const en = { ...enBase, ...enScreens, ...enDocs, ...enParties, ...enReports, ...enSettings, ...enSync, ...enQuality, ...enDemo, ...enPractice, ...enPracticeScreen };
-const ur = { ...urBase, ...urScreens, ...urDocs, ...urParties, ...urReports, ...urSettings, ...urSync, ...urQuality, ...urDemo, ...urPractice, ...urPracticeScreen };
+const en = { ...enBase, ...enScreens, ...enDocs, ...enParties, ...enReports, ...enSettings, ...enSync, ...enQuality, ...enDemo, ...enPractice, ...enPracticeScreen, ...enMix };
+const ur = { ...urBase, ...urScreens, ...urDocs, ...urParties, ...urReports, ...urSettings, ...urSync, ...urQuality, ...urDemo, ...urPractice, ...urPracticeScreen, ...urMix };
 const DICTIONARIES = { en, ur };
 const RTL_LANGS = ['ur', 'ar', 'fa'];
 const STORAGE_KEY = 'shifa.lang';

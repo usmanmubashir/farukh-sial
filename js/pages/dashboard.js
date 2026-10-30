@@ -1,6 +1,7 @@
 // Home screen: greeting, today's hero card, nudges, attention rings, big action tiles, overview,
 // a seven-day chart (or table), top medicines, expiring soon and recent sales.
 import * as anim from '../core/anim.js';
+import * as mix from './_mix-card.js';
 import * as events from '../core/events.js';
 import * as i18n from '../core/i18n.js';
 import { formatDate, todayISO } from '../core/dates.js';
@@ -226,6 +227,7 @@ function markup(d) {
       ${hero(d)}
       ${backupNudge(d)}
       ${attention(d)}
+      ${mix.html()}
       ${tiles()}
       ${more()}
       ${overview(d)}
@@ -261,6 +263,7 @@ async function load() {
   if (!$host) return;
   $host.html(markup(data));
   animateIn();
+  await mix.mount($host);
 }
 
 export async function render($root) {
@@ -268,6 +271,7 @@ export async function render($root) {
   $root.html('<div class="dash-root"></div>');
   $host = $root.children('.dash-root');
   bindViewToggle();
+  mix.bind($host);
   $host.html(
     `<div class="skeleton skeleton-card" aria-hidden="true"></div><div class="stack">${'<div class="skeleton skeleton-line"></div>'.repeat(3)}</div>`,
   );
@@ -280,6 +284,7 @@ export async function render($root) {
 }
 
 export function destroy() {
+  mix.destroy();
   clearTimeout(timer);
   unsubscribe?.();
   unsubscribe = null;

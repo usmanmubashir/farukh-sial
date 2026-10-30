@@ -2970,3 +2970,294 @@ button.status-pill {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- Dashboard: Sales vs Practice donut ---------- */
+
+.mix-card {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.mix-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.mix-head h2 {
+  margin: 0;
+}
+
+.mix-head p {
+  margin: 0;
+}
+
+.mix-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.mix-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--c-surface-muted);
+}
+
+.mix-seg {
+  min-block-size: 36px;
+  padding-inline: var(--space-3);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--c-text-muted);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--d-2), color var(--d-2);
+}
+
+.mix-seg:hover,
+.mix-seg:focus-visible {
+  color: var(--c-text);
+}
+
+.mix-seg.is-on,
+.mix-seg[aria-pressed="true"] {
+  background: var(--c-surface);
+  color: var(--c-text);
+  box-shadow: var(--shadow-1, 0 1px 3px rgb(0 0 0 / 0.12));
+}
+
+.mix-range {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.mix-chart {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: center;
+}
+
+.mix-donut {
+  position: relative;
+  inline-size: 200px;
+  block-size: 200px;
+  margin-block-end: 28px;
+}
+
+.mix-donut svg.donut {
+  display: block;
+  inline-size: 200px;
+  block-size: 200px;
+  overflow: visible;
+}
+
+.donut-track {
+  fill: none;
+  stroke: var(--c-surface-muted);
+}
+
+.donut-hit {
+  cursor: pointer;
+  outline: none;
+}
+
+.donut-seg {
+  fill: none;
+  stroke-linecap: butt;
+  transition: stroke-width var(--d-2) var(--ease-out-expo), opacity var(--d-2);
+}
+
+.donut-seg--sales {
+  stroke: var(--c-brand);
+}
+
+.donut-seg--practice {
+  stroke: var(--c-practice);
+}
+
+.donut-hit:focus-visible .donut-seg {
+  stroke-width: 32;
+}
+
+/* Pop: the active part thickens, the other part fades. Only stroke and opacity change. */
+.mix-card[data-active="sales"] .donut-seg--sales,
+.mix-card[data-active="practice"] .donut-seg--practice {
+  stroke-width: 34;
+}
+
+.mix-card[data-active="sales"] .donut-seg--practice,
+.mix-card[data-active="practice"] .donut-seg--sales {
+  opacity: 0.35;
+}
+
+.donut-empty-ring {
+  fill: none;
+  stroke: var(--c-border-strong);
+  stroke-dasharray: 4 9;
+  transform-origin: 100px 100px;
+  animation: mix-spin 28s linear infinite;
+}
+
+@keyframes mix-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.mix-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  text-align: center;
+  pointer-events: none;
+  padding: 44px;
+}
+
+.mix-total {
+  font-size: var(--fs-lg, 1.35rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.mix-center-label {
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+}
+
+.mix-tip {
+  position: absolute;
+  inset-block-end: -30px;
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.12);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.mix-legend {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mix-legend-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-2);
+  inline-size: 100%;
+  min-block-size: 44px;
+  padding-inline: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 10px);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background var(--d-2), border-color var(--d-2);
+}
+
+.mix-legend-item:hover,
+.mix-legend-item:focus-visible,
+.mix-legend-item.is-on {
+  background: var(--c-surface-muted);
+  border-color: var(--c-border);
+}
+
+.mix-legend-value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.mix-legend-share {
+  color: var(--c-text-muted);
+  font-variant-numeric: tabular-nums;
+  min-inline-size: 5ch;
+  text-align: end;
+}
+
+.mix-swatch {
+  display: inline-block;
+  inline-size: 12px;
+  block-size: 12px;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
+.mix-swatch--sales {
+  background: var(--c-brand);
+}
+
+.mix-swatch--practice {
+  background: var(--c-practice);
+}
+
+.mix-note {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm, 10px);
+  background: var(--c-warn-soft);
+  color: var(--c-text);
+  font-size: var(--fs-sm);
+}
+
+.mix-table .num {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.sr-only {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .mix-chart {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  .mix-legend {
+    inline-size: 100%;
+  }
+
+  .mix-range {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .donut-empty-ring {
+    animation: none;
+  }
+}
+
+.reduce-motion .donut-empty-ring {
+  animation: none;
+}

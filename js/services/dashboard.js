@@ -5,6 +5,8 @@ import { listWithStock } from './products.js';
 import { batchRows } from './stock.js';
 import { accountBalance } from './ledger.js';
 import { listOpen } from './demand.js';
+import { readDailySales } from './reports.js';
+import { practiceTotals } from './practice.js';
 
 /** Cash-like accounts: Cash in Hand (1000) and custom asset accounts numbered 10xx (banks, petty cash). */
 const isCashCode = (code) => code.startsWith('10') && code !== '1100' && code !== '1200';
@@ -98,5 +100,28 @@ export async function getDashboard({ today = todayISO() } = {}) {
     topMedicines,
     expiringSoon: batches.filter((b) => b.units > 0 && ['expired', 'd30'].includes(b.bucket)).slice(0, 5),
     recentSales,
+  };
+}
+
+/**
+ * Sales against Practice for [from, to] (YYYY-MM-DD, inclusive). Sales come from the daily rollup, so they agree with
+ * the hero card and the sales list. Revenue for sales is the sale total (tax included, as the sales screen shows it);
+ * revenue for practice is the amount charged. Voided documents are already excluded by both rollups.
+ */
+export async function salesVsPractice({ from, to }) {
+  const [days, practice] = await Promise.all([readDailySales({ from, to }), practiceTotals({ from, to })]);
+  const sales = days.reduce(
+    (total, day) => ({
+      revenue: total.revenue + day.total,
+      profit: total.profit + day.profit,
+      count: total.count + day.invoices,
+    }),
+    { revenue: 0, profit: 0, count: 0 },
+  );
+  return {
+    from,
+    to,
+    sales,
+    practice: { revenue: practice.charged, profit: practice.profit, count: practice.count },
   };
 }

@@ -42,6 +42,8 @@
     import * as backup from '../js/services/backup.js';
     import * as trace from '../js/services/trace.js';
     import * as practice from '../js/services/practice.js';
+    import * as donut from '../js/core/donut.js';
+    import * as dashboardService from '../js/services/dashboard.js';
 
     db.useDatabase('shifa-services-test');
 
@@ -1217,6 +1219,49 @@
       eq('a range that excludes today has no practices', (await practice.practiceTotals({ from: isoIn(-30), to: isoIn(-20) })).count, 0);
     }
 
+    /* ---------- 17. dashboard: sales vs practice donut ---------- */
+
+    async function donutGroup() {
+      // Shares: tenths of a percent, always exactly 1000 when there is anything to share.
+      eq('two parts split 3 to 1 as 750 and 250', donut.shares([3, 1]), [750, 250]);
+      eq('three equal parts round to 334, 333, 333', donut.shares([1, 1, 1]), [334, 333, 333]);
+      eq('all zero gives all zero shares', donut.shares([0, 0]), [0, 0]);
+      eq('a single part is the whole', donut.shares([5, 0]), [1000, 0]);
+      eq('negative amounts count as nothing', donut.shares([-3, 4]), [0, 1000]);
+      let sumsOk = true;
+      for (let n = 1; n <= 200; n += 1) {
+        const values = [n, (n * 7) % 13, (n * 3) % 5 + 1];
+        if (donut.shares(values).reduce((a, b) => a + b, 0) !== 1000) sumsOk = false;
+      }
+      ok('shares add up to exactly 100.0% for 200 mixed inputs', sumsOk);
+      eq('percent text keeps one decimal', donut.percentText(750), '75.0%');
+
+      // Markup: empty shows a ring and no segments; one part draws one segment; two parts draw two.
+      const empty = donut.donutMarkup({ slices: [{ key: 'sales', label: 'Sales', size: 0 }, { key: 'practice', label: 'Practice', size: 0 }], ariaLabel: 'x' });
+      ok('empty donut shows the placeholder ring', empty.html.includes('donut-empty-ring') && !empty.html.includes('class="donut-seg '));
+      const single = donut.donutMarkup({ slices: [{ key: 'sales', label: 'Sales', size: 900 }, { key: 'practice', label: 'Practice', size: 0 }], ariaLabel: 'x' });
+      eq('a single slice draws one segment at 100%', [(single.html.match(/class="donut-seg /g) ?? []).length, single.shares], [1, [1000, 0]]);
+      const two = donut.donutMarkup({ slices: [{ key: 'sales', label: 'Sales', size: 3 }, { key: 'practice', label: 'Practice', size: 1 }], ariaLabel: 'x' });
+      eq('two slices draw two segments and their shares', [(two.html.match(/class="donut-seg /g) ?? []).length, two.shares], [2, [750, 250]]);
+
+      // The service: sales and practice for a range, from the rollups.
+      await resetDb();
+      const prod = await products.createProduct({ name: 'Donut Tablet', code: 'DNT', class: 'otc', soldAs: 'strip', unitsPerPack: 10, salePricePerPack: 4000, costPerPack: 2000 });
+      await stock.addBatch({ productId: prod.id, batchNo: 'DN-1', expiry: isoIn(90), packs: 10, costPerPack: 2000, mrp: 4000 });
+      await sales.createSale({ items: [{ productId: prod.id, packs: 1 }], payments: [{ method: 'cash', amount: 4000 }] });
+      await practice.createPractice({ items: [{ productId: prod.id, packs: 1 }], chargedAmount: 3000 });
+      const mix = await dashboardService.salesVsPractice({ from: today, to: today });
+      eq('sales revenue is the sale total', mix.sales.revenue, 4000);
+      eq('sales profit is total less cost', mix.sales.profit, 2000);
+      eq('practice revenue is the amount charged', mix.practice.revenue, 3000);
+      eq('practice profit is charged less cost', mix.practice.profit, 1000);
+      eq('counts: one invoice and one practice', [mix.sales.count, mix.practice.count], [1, 1]);
+      const split = donut.shares([mix.sales.revenue, mix.practice.revenue]);
+      eq('the donut shares of sales and practice are 571 and 429 (sum 1000)', split, [571, 429]);
+      const past = await dashboardService.salesVsPractice({ from: isoIn(-40), to: isoIn(-30) });
+      eq('a range with nothing in it is all zero', [past.sales.revenue, past.practice.revenue, past.sales.count], [0, 0, 0]);
+    }
+
     /* ---------- runner ---------- */
 
     const groups = [
@@ -1236,6 +1281,7 @@
       ['backup: restore gives identical reports', backupGroup],
       ['practice', practiceGroup],
       ['practice screen services', practiceScreenGroup],
+      ['dashboard: sales vs practice donut', donutGroup],
     ];
 
     const list = document.getElementById('results');
