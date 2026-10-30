@@ -55,4 +55,5 @@ export default {
   'settings.syncBackendSupabase': 'Supabase',
   'settings.syncUsername': 'Username',
   'settings.syncUsernameHelp': 'The owner or staff username of this pharmacy. The same password as the app.',
+  'settings.syncUrlHelpCloudflare': 'The address of your sync Worker, for example https://shifa-sync.your-name.workers.dev. No trailing slash.',
 };

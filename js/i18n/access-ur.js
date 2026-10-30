@@ -55,4 +55,5 @@ export default {
   'settings.syncBackendSupabase': 'Supabase',
   'settings.syncUsername': 'صارف نام',
   'settings.syncUsernameHelp': 'اس فارمیسی کا اونر یا عملے کا صارف نام۔ پاس ورڈ وہی جو ایپ کا ہے۔',
+  'settings.syncUrlHelpCloudflare': 'آپ کے سنک Worker کا ایڈریس، مثلاً https://shifa-sync.your-name.workers.dev۔ آخر میں / نہ لگائیں۔',
 };
