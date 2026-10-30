@@ -1,0 +1,13 @@
+# Cloudflare Worker for Shifa Pharmacy POS sync. Deploy with: npx wrangler deploy (from this folder).
+name = "shifa-sync"
+main = "src/index.js"
+compatibility_date = "2026-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "shifa-sync"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+[vars]
+# The origin of the app (GitHub Pages address), without a trailing slash. Several origins can be comma separated.
+ALLOWED_ORIGIN = "https://usmanmubashir.github.io"

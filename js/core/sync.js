@@ -14,6 +14,7 @@ import { set as setState } from './store.js';
 import * as replication from '../services/replication.js';
 import { rebuildRollups } from '../services/rollups.js';
 import { SupabaseAdapter, signIn, SyncError } from './sync-supabase.js';
+import { CloudflareAdapter, signInCloudflare } from './sync-cloudflare.js';
 
 const PUSH_BATCH = 200;
 const PULL_PAGE = 500;
@@ -69,17 +70,55 @@ export const getConfig = () => db.getSetting('syncConfig', null);
 
 /**
  * Signs the device in to the sync server, stores the settings and the session on this device, and syncs.
+ * backend: 'cloudflare' (Worker address and username) or 'supabase' (address, anon key and email; the default).
  * The password is used once and never stored. Only the refresh token is kept.
+ * upload: send the records already on this device. True when this device starts the pharmacy's data; false when it
+ * joins an existing pharmacy, so an empty device adds nothing.
  */
-export async function connect({ url, anonKey, email, password }) {
-  const config = { url: String(url).trim().replace(/\/+$/, ''), anonKey: String(anonKey).trim(), email: String(email).trim() };
-  const session = await signIn(config, config.email, password);
+export async function connect({ backend = 'supabase', url, anonKey, email, username, password, upload = true }) {
+  const base = String(url).trim().replace(/\/+$/, '');
+  let config;
+  let session;
+  if (backend === 'cloudflare') {
+    config = { backend, url: base, username: String(username).trim().toLowerCase() };
+    session = await signInCloudflare(config, password);
+  } else {
+    config = { backend: 'supabase', url: base, anonKey: String(anonKey).trim(), email: String(email).trim() };
+    session = await signIn(config, config.email, password);
+  }
   await db.transaction((ctx) => {
     ctx.put('settings', { key: 'syncConfig', value: config });
     ctx.put('settings', { key: 'syncSession', value: session });
   });
   useAdapter(config, session);
+  if (upload) await queueExisting();
   return syncNow();
+}
+
+/** Joins an existing pharmacy from an empty device: the same sign-in, no upload, then the first pull. */
+export const joinPharmacy = (options) => connect({ ...options, upload: false });
+
+/**
+ * Queues every business row on this device, so records made before the first connect reach the server.
+ * A row without a stamp gets one (a put stamps and queues it). A row that already has a stamp keeps it as its op id,
+ * so queuing it twice is harmless: the server ignores a repeat.
+ */
+export async function queueExisting() {
+  const CHUNK = 500;
+  for (const store of SYNCED_STORES) {
+    const rows = await db.getAll(store);
+    for (let from = 0; from < rows.length; from += CHUNK) {
+      await db.transaction((ctx) => {
+        for (const row of rows.slice(from, from + CHUNK)) {
+          if (!row.stamp) {
+            ctx.put(store, row);
+            continue;
+          }
+          ctx.queue(store, row);
+        }
+      });
+    }
+  }
 }
 
 /** Forgets the server and the session on this device. Changes already in the outbox stay there. */
@@ -93,7 +132,8 @@ export async function disconnect() {
 }
 
 function useAdapter(config, session) {
-  adapter = new SupabaseAdapter(config, session, (next) => db.setSetting('syncSession', next));
+  const save = (next) => db.setSetting('syncSession', next);
+  adapter = config.backend === 'cloudflare' ? new CloudflareAdapter(config, session, save) : new SupabaseAdapter(config, session, save);
 }
 
 /* ---------- Running a sync ---------- */
@@ -222,7 +262,8 @@ async function loadSnapshot() {
  * Returns true when a snapshot was published.
  */
 export async function publishSnapshot({ force = false } = {}) {
-  if (!adapter) return false;
+  // Some servers keep no snapshots (the Cloudflare one): a device then replays the op log from the start.
+  if (!adapter || adapter.snapshots === false) return false;
   const cursor = (await savedCursor()) ?? 0;
   const latest = await adapter.latestSnapshot();
   if (!force && cursor - (latest?.cursor ?? 0) < SNAPSHOT_AFTER_OPS) return false;

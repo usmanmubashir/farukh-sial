@@ -21,6 +21,17 @@ Code: `js/core/sync.js` (engine), `js/core/sync-supabase.js` (adapter), `js/serv
 - **Last writer wins for a record edited on two devices.** If two devices edit the same medicine's price while offline, the later change wins. Stock and ledger lines are never lost this way.
 - **Background Sync needs a window.** The browser may wake the service worker with the `shifa-sync` tag. The worker then asks an open app window to sync. With no window open, the sync runs when the app next opens.
 
+## Backends
+
+Two servers are supported, and the engine does not change between them:
+
+- **Cloudflare (Worker + D1)**, the default for new setups. See `docs/CLOUDFLARE.md`. Sign-in sends a password proof derived on the device. No snapshots: a new device replays the op log.
+- **Supabase**, the older option. See `docs/supabase.sql`.
+
+Both connect through Settings → Sync. The first connect uploads every record already on the device (`sync.queueExisting`), so data made before sync reaches the server. Joining an existing pharmacy from an empty device skips the upload (`sync.joinPharmacy`).
+
+Staff accounts (`users`) are synced records, so their password changes and access changes reach every device.
+
 ## Identity, stamps and the outbox
 
 Every write to a business record stamps the row: `stamp = wall-clock ms . counter . deviceId`, for example `001793271840718.000000.d413dd73-…`. Stamps are fixed width, so comparing two as strings orders them. The clock is a hybrid logical clock (`db.js: stamp()`, `observe()`): it moves past every stamp the device receives, so a later local change always sorts after the change it saw.

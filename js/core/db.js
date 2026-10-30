@@ -14,6 +14,8 @@ export const SYNCED_STORES = [
   'accounts', 'ledgerEntries', 'vouchers', 'demandList', 'rxRegister',
   // Practice (schema 6): immutable documents, append-only voids, kits.
   'practices', 'practiceItems', 'practiceVoids', 'practiceKits',
+  // Staff and owner sign-in records (hash and salt only). They sync so every device of the pharmacy can sign in.
+  'users',
 ];
 
 /**
@@ -21,7 +23,7 @@ export const SYNCED_STORES = [
  * tombstones is sync state: one row per deleted synced row, so an older copy arriving later cannot bring it back.
  * It is included in backups and snapshots.
  */
-export const LOCAL_STORES = ['settings', 'counters', 'outbox', 'syncState', 'users', 'dailySales', 'dailyProducts', 'dailyLedger', 'dailyPractice', 'tombstones', 'errorLog'];
+export const LOCAL_STORES = ['settings', 'counters', 'outbox', 'syncState', 'dailySales', 'dailyProducts', 'dailyLedger', 'dailyPractice', 'tombstones', 'errorLog'];
 
 const ALL_STORES = [...SYNCED_STORES, ...LOCAL_STORES];
 
@@ -30,6 +32,9 @@ const KEY_FIELD = {
   settings: 'key', counters: 'key', syncState: 'key', outbox: 'seq',
   dailySales: 'date', dailyProducts: 'key', dailyLedger: 'key', dailyPractice: 'date',
 };
+
+/** The primary key of a row in a store (the field KEY_FIELD names, or "id"). */
+export const keyOf = (store, row) => row[KEY_FIELD[store] ?? 'id'];
 
 /** Synced stores as they were at schema version 4. Used only by the version 4 migration. */
 const SYNCED_STORES_V4 = [
@@ -462,6 +467,9 @@ function createContext(tx, { replicating }) {
     touched.add('counters');
     return value;
   };
+
+  /** Queues an existing row as a put, unchanged: its stamp is the op id. Used by the first connect (see sync.queueExisting). */
+  ctx.queue = (store, row) => enqueue(tx, { opId: row.stamp, stamp: row.stamp, store, op: 'put', key: keyOf(store, row), record: row });
 
   ctx.touched = touched;
   return ctx;

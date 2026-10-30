@@ -12,7 +12,7 @@ import * as db from '../core/db.js';
 import { SYNCED_STORES, tombstoneId } from '../core/db.js';
 
 /** Unique fields per store. A clash is reported instead of failing the whole batch. */
-const UNIQUE_FIELDS = { sales: 'number', purchases: 'number', returns: 'number', vouchers: 'number', accounts: 'code', practices: 'number', practiceVoids: 'practiceId' };
+const UNIQUE_FIELDS = { sales: 'number', purchases: 'number', returns: 'number', vouchers: 'number', accounts: 'code', practices: 'number', practiceVoids: 'practiceId', users: 'username' };
 
 /**
  * Applies ops in order. Each op: { store, op: 'put' | 'delete', key, record?, stamp }.

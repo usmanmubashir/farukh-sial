@@ -49,6 +49,7 @@ const SHELL = [
   './js/core/router.js',
   './js/core/store.js',
   './js/core/sync-supabase.js',
+  './js/core/sync-cloudflare.js',
   './js/core/sync.js',
   './js/core/trend.js',
   './js/core/ui.js',

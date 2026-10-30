@@ -218,3 +218,11 @@ export async function restoreSession() {
   setState('session', session ? { username: session.username, expiresAt: session.expiresAt } : null);
   setAccess(session ? await sessionRecord() : null);
 }
+
+/** Sets the pharmacy's name on this device (the name is not synced; each device keeps its own). */
+export async function setPharmacyName(name) {
+  const value = String(name ?? '').trim();
+  if (!value) throw new AuthError('pharmacyRequired');
+  await db.setSetting('pharmacyName', value);
+  setState('pharmacyName', value);
+}

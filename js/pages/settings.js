@@ -167,11 +167,19 @@ async function syncSection() {
     'set-sync',
     t('settings.sync'),
     `<p class="muted small">${esc(t('settings.syncHelp'))}</p>
-     <p class="set-sync-state">${esc(connected ? t('settings.syncConnected', { email: config?.email ?? '' }) : t('settings.syncNotConnected'))}</p>
+     <p class="set-sync-state">${esc(connected ? t('settings.syncConnected', { email: config?.email || config?.username || '' }) : t('settings.syncNotConnected'))}</p>
      <form class="set-form" data-form="sync" novalidate>
+       <div class="field">
+         <label for="sy-backend">${esc(t('settings.syncBackend'))}</label>
+         <select id="sy-backend" name="backend">
+           <option value="cloudflare"${config?.backend !== 'supabase' ? ' selected' : ''}>${esc(t('settings.syncBackendCloudflare'))}</option>
+           <option value="supabase"${config?.backend === 'supabase' ? ' selected' : ''}>${esc(t('settings.syncBackendSupabase'))}</option>
+         </select>
+       </div>
        ${field('sy-url', 'url', t('settings.syncUrl'), 'url', config?.url ?? '', t('settings.syncUrlHelp'))}
-       ${field('sy-key', 'anonKey', t('settings.syncKey'), 'text', config?.anonKey ?? '', t('settings.syncKeyHelp'))}
-       ${field('sy-email', 'email', t('settings.syncEmail'), 'email', config?.email ?? '')}
+       <div data-only="cloudflare"${config?.backend === 'supabase' ? ' hidden' : ''}>${field('sy-username', 'username', t('settings.syncUsername'), 'text', config?.username ?? '', t('settings.syncUsernameHelp'))}</div>
+       <div data-only="supabase"${config?.backend === 'supabase' ? '' : ' hidden'}>${field('sy-key', 'anonKey', t('settings.syncKey'), 'text', config?.anonKey ?? '', t('settings.syncKeyHelp'))}</div>
+       <div data-only="supabase"${config?.backend === 'supabase' ? '' : ' hidden'}>${field('sy-email', 'email', t('settings.syncEmail'), 'email', config?.email ?? '')}</div>
        ${field('sy-pass', 'password', t('settings.syncPassword'), 'password', '', t('settings.syncPasswordHelp'), ' autocomplete="current-password"')}
        <p class="form-status muted small" role="status" aria-live="polite"></p>
        <div class="row set-actions">
@@ -182,10 +190,19 @@ async function syncSection() {
   );
 }
 
+/** Shows only the fields the chosen backend uses. */
+function showBackendFields(form) {
+  const backend = $(form).find('#sy-backend').val();
+  $(form).find('[data-only]').each(function toggle() {
+    $(this).prop('hidden', this.getAttribute('data-only') !== backend);
+  });
+}
+
 async function saveSync(form) {
   const values = Object.fromEntries(new FormData(form));
   const $status = $(form).find('.form-status');
-  if (!values.url || !values.anonKey || !values.email || !values.password) {
+  const needed = values.backend === 'supabase' ? [values.url, values.anonKey, values.email, values.password] : [values.url, values.username, values.password];
+  if (needed.some((value) => !value)) {
     $status.text(t('settings.syncNeedFields'));
     return;
   }
@@ -469,6 +486,8 @@ function bind() {
     event.preventDefault();
     saveSync(event.currentTarget);
   });
+  $host.on('change', '#sy-backend', (event) => showBackendFields(event.currentTarget.form));
+  $host.find('[data-form="sync"]').each((_, form) => showBackendFields(form));
   $host.on('click', '[data-action="sync-now"]', () => sync.syncNow());
   $host.on('click', '[data-action="sync-disconnect"]', async () => {
     await sync.disconnect();

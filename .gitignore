@@ -28,3 +28,8 @@ syncConfig*.json
 # Scratch files made while working
 scripts/_*.tmp.mjs
 tests/_output/
+
+# Owner seed for the sync server (contains a password hash)
+worker/seed-owner.sql
+worker/.wrangler/
+worker/node_modules/
