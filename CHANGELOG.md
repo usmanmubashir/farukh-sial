@@ -5,6 +5,9 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 ## [Unreleased]
 
 ### Added
+- Cash drawer shifts: open a shift with the opening float, record pay-ins, pay-outs, petty cash and cash drops with reasons, close with a blind count, and see the over or short amount. X-reports during the shift and Z-reports at the close (printable on the receipt printer). Shift history with discrepancies; only the owner can correct a closed count, and every correction is kept.
+
+### Added
 - Users and section access. The owner adds staff accounts on the new Users screen and chooses which sections each one may open. The sidebar, bottom bar, menus, command palette and dashboard show only those sections, and a typed or bookmarked address for any other section sends the user to their first permitted page. Staff can change their own password; the owner can reset a staff password, disable or delete an account.
 
 ## [1.2.0] - 2026-10-29

@@ -24,13 +24,15 @@ import enPracticeScreen from '../i18n/practice-screen-en.js';
 import urPracticeScreen from '../i18n/practice-screen-ur.js';
 import enMix from '../i18n/mix-en.js';
 import urMix from '../i18n/mix-ur.js';
+import enShift from '../i18n/shift-en.js';
+import urShift from '../i18n/shift-ur.js';
 import enAccess from '../i18n/access-en.js';
 import urAccess from '../i18n/access-ur.js';
 import * as store from './store.js';
 
 // Screen strings override the base dictionaries with the same key.
-const en = { ...enBase, ...enScreens, ...enDocs, ...enParties, ...enReports, ...enSettings, ...enSync, ...enQuality, ...enDemo, ...enPractice, ...enPracticeScreen, ...enMix, ...enAccess };
-const ur = { ...urBase, ...urScreens, ...urDocs, ...urParties, ...urReports, ...urSettings, ...urSync, ...urQuality, ...urDemo, ...urPractice, ...urPracticeScreen, ...urMix, ...urAccess };
+const en = { ...enBase, ...enScreens, ...enDocs, ...enParties, ...enReports, ...enSettings, ...enSync, ...enQuality, ...enDemo, ...enPractice, ...enPracticeScreen, ...enMix, ...enAccess, ...enShift };
+const ur = { ...urBase, ...urScreens, ...urDocs, ...urParties, ...urReports, ...urSettings, ...urSync, ...urQuality, ...urDemo, ...urPractice, ...urPracticeScreen, ...urMix, ...urAccess, ...urShift };
 const DICTIONARIES = { en, ur };
 const RTL_LANGS = ['ur', 'ar', 'fa'];
 const STORAGE_KEY = 'shifa.lang';

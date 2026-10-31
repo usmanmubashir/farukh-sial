@@ -42,6 +42,7 @@ const ROUTES = [
   { path: '/purchases/new', section: 'purchases-new', load: page('purchase-new') },
   { path: '/returns', nav: 'daily', section: 'returns', icon: 'returns', load: page('returns') },
   { path: '/returns/new', section: 'returns-new', load: page('return-new') },
+  { path: '/shifts', nav: 'daily', section: 'shifts', label: 'nav.shifts', icon: 'bank', load: page('shifts') },
 
   { path: '/products', nav: 'medicines', section: 'products', label: 'nav.products', icon: 'products', load: page('products') },
   { path: '/stock', nav: 'medicines', section: 'stock', icon: 'stock', bottom: 'stock', load: page('stock') },
@@ -58,6 +59,7 @@ const ROUTES = [
   { path: '/vouchers', nav: 'accounts', section: 'vouchers', label: 'nav.cashBook', icon: 'bank', load: page('vouchers') },
   { path: '/accounts', nav: 'accounts', section: 'accounts', label: 'nav.ledger', icon: 'ledger', load: page('accounts') },
   { path: '/accounts/:code', section: 'accounts', load: page('accounts') },
+  { path: '/shift-history', nav: 'accounts', section: 'shift-audit', label: 'nav.shiftHistory', icon: 'receipt', load: page('shift-history') },
   { path: '/reports/:key', section: 'reports', load: page('reports') },
   { path: '/reports', nav: 'accounts', section: 'reports', icon: 'reports', load: page('reports') },
 

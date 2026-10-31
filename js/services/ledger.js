@@ -228,6 +228,8 @@ export async function postEntryIn(ctx, { date = todayISO(), docType, docId = nul
     accounts.push(account);
   }
 
+  // A line posted while a cash drawer shift is open is tagged with that shift (see services/shifts.js).
+  const shiftId = (await ctx.get('settings', 'currentShiftId'))?.value ?? null;
   const entryId = db.newId();
   for (const [i, line] of nonZero.entries()) {
     const row = ctx.put('ledgerEntries', {
@@ -242,6 +244,7 @@ export async function postEntryIn(ctx, { date = todayISO(), docType, docId = nul
       debit: line.debit,
       credit: line.credit,
       memo: line.memo || memo,
+      shiftId,
     });
     await applyCashLine(ctx, { accountCode: row.accountCode, date, group: ledgerGroup(docType, row.memo), debit: row.debit, credit: row.credit });
   }

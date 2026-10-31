@@ -275,3 +275,10 @@ Settings rows used by sync (device-only, excluded from backups): `deviceId` (exi
 - `shifa.lang`: `en` or `ur`
 - `shifa.theme`: `auto`, `light` or `dark`
 
+
+## Shifts (cash drawer), schema 8
+
+- shifts: one row per shift on this device (id, number, status open or closed, openedAt, openedBy, openingCash, closedAt, closedBy, counted, expected, variance, closingNote, corrections). Device-local, never synced.
+- shiftMovements: cash moved during a shift (type payIn, payOut, petty or cashDrop, amount, reason, account, entryId). Device-local.
+- ledgerEntries.shiftId: every ledger line posted while a shift is open carries that shift id (new index). Synced like the rest of the ledger; ids from other devices simply match no local shift.
+- expected drawer = opening float plus the net cash (account 1000) tagged with the shift. variance = counted minus expected.

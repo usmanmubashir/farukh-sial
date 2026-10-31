@@ -45,6 +45,7 @@
     import * as donut from '../js/core/donut.js';
     import * as dashboardService from '../js/services/dashboard.js';
     import * as practiceReports from '../js/services/practice-reports.js';
+    import * as shifts from '../js/services/shifts.js';
     import * as auth from '../js/core/auth.js';
     import * as users from '../js/services/users.js';
     import { accessOf, canOpen, sanitizeSections, screensOf, sectionOf, GRANTABLE_SECTIONS, REPORT_KEYS } from '../js/core/access.js';
@@ -1491,6 +1492,56 @@
       eq('profit summary: returns show as their own line on the return day', summary.find((r) => r.period === '2026-01-02').returnsProfit, -80);
     }
 
+    /* ---------- 21. cash drawer shifts ---------- */
+
+    async function shiftsGroup() {
+      await resetDb();
+      const tea = await products.createProduct({ name: 'Tea', code: 'TEA', soldAs: 'pack', unitsPerPack: 1, costPerPack: 1000, salePricePerPack: 2000 });
+      await stock.addBatch({ productId: tea.id, batchNo: 'T1', expiry: isoIn(200), packs: 20, costPerPack: 1000, mrp: 2000 });
+      const cust = await parties.createCustomer({ name: 'Shift Customer' });
+      const today = todayISO();
+
+      const opened = await shifts.openShift({ openingCash: 5000, note: 'morning float' });
+      eq('a shift opens with the float counted in the drawer', [opened.status, opened.openingCash, opened.number.startsWith('SFT-')], ['open', 5000, true]);
+      await fails('a second shift cannot open while one is open', () => shifts.openShift({ openingCash: 100 }), 'shiftAlreadyOpen');
+      eq('the open shift is the one on this device', (await shifts.currentShift())?.id, opened.id);
+
+      await sales.createSale({ items: [{ productId: tea.id, packs: 1 }], payments: [{ method: 'cash', amount: 2000 }], today });
+      await sales.createSale({ customer: cust.id, items: [{ productId: tea.id, packs: 1 }], payments: [{ method: 'bank', accountCode: '1010', amount: 500 }], today });
+      await shifts.addShiftMovement({ type: 'payIn', amount: 1000, reason: 'owner put cash in' });
+      await shifts.addShiftMovement({ type: 'payOut', amount: 300, reason: 'tea and tissues' });
+      await shifts.addShiftMovement({ type: 'petty', amount: 150, reason: 'bus fare' });
+      await shifts.addShiftMovement({ type: 'cashDrop', amount: 1200, reason: 'to bank', payAccount: '1010' });
+      await fails('a movement needs a reason', () => shifts.addShiftMovement({ type: 'payOut', amount: 10, reason: ' ' }), 'required');
+
+      const summary = await shifts.shiftSummary(opened.id);
+      // Drawer: 5000 float + 2000 cash sale + 1000 pay-in − 300 pay-out − 150 petty − 1200 cash drop = 6350.
+      eq('expected drawer = float + cash in − cash out', summary.expected, 6350);
+      eq('cash sales are the cash part of the sales only', summary.categories.cashSales, 2000);
+      eq('the bank part of a sale is digital, not drawer cash', summary.digital.sales, 500);
+      eq('pay-ins, pay-outs, petty and drops are separate lines', [summary.categories.payIns, summary.categories.payOuts, summary.categories.petty, summary.categories.cashDrops], [1000, -300, -150, -1200]);
+      eq('the transaction counts follow the documents', summary.counts.sales, 2);
+
+      const closed = await shifts.closeShift({ counted: 6300, note: 'short by 50, checked twice' });
+      eq('the close keeps the expected figure and the variance (short 50)', [closed.status, closed.expected, closed.counted, closed.variance], ['closed', 6350, 6300, -50]);
+      eq('no shift is open after the close', await shifts.currentShift(), null);
+      await fails('a movement needs an open shift', () => shifts.addShiftMovement({ type: 'payOut', amount: 10, reason: 'late' }), 'shiftNotOpen');
+
+      eq('the shift appears in the history with a discrepancy', (await shifts.discrepancies()).map((s) => s.id), [opened.id]);
+
+      // Only the owner can correct a closed count; the correction is kept with its reason.
+      await db.setSetting('session', { username: 'asif', userId: 'staff-1' });
+      await fails('a staff member cannot correct a closed count', () => shifts.correctShiftCount(opened.id, { counted: 6350, reason: 'recount' }), 'ownerOnly');
+      await db.setSetting('session', { username: 'owner', userId: 'owner' });
+      const corrected = await shifts.correctShiftCount(opened.id, { counted: 6350, reason: 'the 50 was a note in the till' });
+      eq('the owner correction clears the variance and is kept', [corrected.variance, corrected.corrections.length, corrected.corrections[0].from], [0, 1, 6300]);
+
+      // A second shift starts from zero: the first shift does not leak into it.
+      const next = await shifts.openShift({ openingCash: 2000 });
+      const nextSummary = await shifts.shiftSummary(next.id);
+      eq('a new shift starts with its own float only', [nextSummary.expected, nextSummary.categories.cashSales], [2000, 0]);
+    }
+
     const groups = [
       ['products', productsGroup],
       ['stock and FEFO', stockGroup],
@@ -1513,6 +1564,7 @@
       ['practice reports: from the database', practiceReportsGroup],
       ['users and access', accessGroup],
       ['business rules: returns, rollups and rounding', returnsAndRollupsGroup],
+      ['cash drawer shifts', shiftsGroup],
     ];
 
     const list = document.getElementById('results');

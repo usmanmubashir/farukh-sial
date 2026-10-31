@@ -23,7 +23,7 @@ export const SYNCED_STORES = [
  * tombstones is sync state: one row per deleted synced row, so an older copy arriving later cannot bring it back.
  * It is included in backups and snapshots.
  */
-export const LOCAL_STORES = ['settings', 'counters', 'outbox', 'syncState', 'dailySales', 'dailyProducts', 'dailyLedger', 'dailyPractice', 'tombstones', 'errorLog'];
+export const LOCAL_STORES = ['settings', 'counters', 'outbox', 'syncState', 'dailySales', 'dailyProducts', 'dailyLedger', 'dailyPractice', 'tombstones', 'errorLog', 'shifts', 'shiftMovements'];
 
 const ALL_STORES = [...SYNCED_STORES, ...LOCAL_STORES];
 
@@ -175,6 +175,16 @@ const migrations = [
     const kits = db.createObjectStore('practiceKits', { keyPath: 'id' });
     kits.createIndex('name', 'nameKey');
     db.createObjectStore('dailyPractice', { keyPath: 'date' });
+  },
+  // v7: Shifts (cash drawer). shifts: one row per shift on this device. shiftMovements: cash moved during a shift.
+  // ledgerEntries gets a shiftId index, so one shift's cash can be read directly.
+  (db, transaction) => {
+    const shifts = db.createObjectStore('shifts', { keyPath: 'id' });
+    shifts.createIndex('status', 'status');
+    shifts.createIndex('openedAt', 'openedAt');
+    const movements = db.createObjectStore('shiftMovements', { keyPath: 'id' });
+    movements.createIndex('shiftId', 'shiftId');
+    transaction.objectStore('ledgerEntries').createIndex('shiftId', 'shiftId');
   },
 ];
 

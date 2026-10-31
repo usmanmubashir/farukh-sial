@@ -106,6 +106,7 @@ export const SERVICE_CODES = [
   'emptyPurchase', 'expiredBatch', 'supplierRequiredForCredit', 'overpaid', 'invalidField', 'required', 'notFound',
   'productInactive', 'emptyReturn', 'returnExceedsSold', 'returnExceedsBought', 'refundExceedsReturn',
   'walkInRefundMustMatch', 'saleVoided', 'insufficientStock', 'batchExpired',
+  'shiftAlreadyOpen', 'shiftNotOpen', 'shiftNotClosed', 'ownerOnly',
   'invalidAccount', 'noFreeAccountCode', 'unknownAccount',
 ];
 

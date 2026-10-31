@@ -62,6 +62,7 @@ export const DEFAULT_SETTINGS = {
     expense: 'EXP',
     income: 'INC',
     practice: 'PRC',
+    shift: 'SFT',
   },
 };
 
