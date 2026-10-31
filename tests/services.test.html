@@ -858,7 +858,8 @@
       // Profit by day and by month, with a sale return and an expense.
       const days = [
         { date: '2026-10-01', invoices: 2, total: 1000, tax: 50, cost: 600, profit: 350 },
-        { date: '2026-10-02', invoices: 1, total: 500, tax: 0, cost: 200, profit: 300 },
+        // The daily rollup is already net of the return made that day: 500 sold less 100 returned.
+        { date: '2026-10-02', invoices: 1, total: 400, tax: 0, cost: 140, profit: 260 },
       ];
       const returns = [{ type: 'sale', date: '2026-10-02', net: 100, cost: 60 }];
       const expenses = [{ date: '2026-10-01', amount: 150 }];
@@ -1417,6 +1418,79 @@
       await auth.login('owner', 'owner-pass-1');
     }
 
+    /* ---------- 20. business rules: returns, rollups and rounding ---------- */
+
+    async function returnsAndRollupsGroup() {
+      await resetDb();
+      const pan = await products.createProduct({ name: 'Panadol', code: 'RT1', soldAs: 'strip', unitsPerPack: 10, looseSelling: true, looseUnitPrice: 81, costPerPack: 333, salePricePerPack: 777 });
+      const ris = await products.createProduct({ name: 'Risek', code: 'RT2', soldAs: 'strip', unitsPerPack: 10, costPerPack: 1001, salePricePerPack: 1999 });
+      await stock.addBatch({ productId: pan.id, batchNo: 'P1', expiry: isoIn(200), packs: 20, costPerPack: 333, mrp: 777 });
+      await stock.addBatch({ productId: ris.id, batchNo: 'R1', expiry: isoIn(200), packs: 20, costPerPack: 1001, mrp: 1999 });
+      const cust = await parties.createCustomer({ name: 'Rounding Customer' });
+      const today = todayISO();
+
+      await fails('a discount percentage that is not a number is refused', () => sales.createSale({ customer: cust.id, items: [{ productId: pan.id, packs: 1 }], discountPercent: 'abc', today }), 'invalidField');
+
+      const sale = await sales.createSale({
+        customer: cust.id,
+        items: [{ productId: pan.id, packs: 3, looseUnits: 1 }, { productId: ris.id, packs: 1 }],
+        discountPercent: 7,
+        tax: 123,
+        payments: [{ method: 'cash', amount: 100 }],
+        today,
+      });
+      const [panLine, risLine] = sale.items;
+
+      // Compare the incremental rollups with a full rebuild, row by row.
+      const snapshot = async () => ({
+        days: JSON.stringify((await db.getAll('dailySales')).map(({ updatedAt, ...row }) => row).sort((a, b) => a.date.localeCompare(b.date))),
+        products: JSON.stringify((await db.getAll('dailyProducts')).map(({ updatedAt, ...row }) => row).sort((a, b) => a.key.localeCompare(b.key))),
+      });
+      const agrees = async (label) => {
+        const live = await snapshot();
+        await rollups.rebuildRollups();
+        const rebuilt = await snapshot();
+        eq(label, live, rebuilt);
+      };
+      await agrees('after the sale, incremental rollups equal a full rebuild');
+
+      const first = await returns.createSaleReturn({ saleId: sale.id, items: [{ saleItemId: panLine.id, units: 5 }], refund: 0, date: today });
+      await agrees('after a partial return, incremental rollups equal a full rebuild');
+      const afterFirst = await db.get('dailySales', today);
+      eq('the day shows the sale less the returned value before tax', afterFirst.total, sale.total - first.gross);
+
+      await returns.createSaleReturn({ saleId: sale.id, items: [{ saleItemId: panLine.id, units: panLine.units - 5 }, { saleItemId: risLine.id, units: risLine.units }], refund: 0, date: today });
+      await agrees('after the sale is fully returned, incremental rollups equal a full rebuild');
+
+      const finalSale = await db.get('sales', sale.id);
+      const returnedRows = (await db.getAll('returns')).filter((r) => r.saleId === sale.id);
+      const returnedGross = returnedRows.reduce((total, r) => total + r.gross, 0);
+      const returnedTax = returnedRows.reduce((total, r) => total + r.tax, 0);
+      eq('returns add up to the sale total exactly', returnedGross, sale.total);
+      eq('returned tax adds up to the sale tax exactly', returnedTax, sale.tax);
+      eq('the sale is marked returned', finalSale.status, 'returned');
+      eq('after the full return the customer holds the 100 paid in cash as credit (no refund was given)', await ledger.partyBalance(cust.id, ledger.ACCOUNT.receivable), -100);
+
+      const day = await db.get('dailySales', today);
+      eq('a fully returned day has no sales left (total)', day.total, 0);
+      eq('a fully returned day has no profit left', day.profit, 0);
+      eq('a fully returned day has no cost left', day.cost, 0);
+      const productRows = await db.getAll('dailyProducts');
+      eq('a fully returned medicine has no units left on the day', productRows.reduce((t, r) => t + r.units, 0), 0);
+
+      // Profit summary: the rollup is already net of returns, so Net must equal the rollup profit less expenses.
+      const summary = reports.profitFromDaily({
+        days: [
+          { date: '2026-01-01', invoices: 2, total: 1000, tax: 100, cost: 500, profit: 400 },
+          { date: '2026-01-02', invoices: 0, total: -200, tax: 0, cost: -120, profit: -80 },
+        ],
+        returns: [{ type: 'sale', date: '2026-01-02', net: 200, cost: 120 }],
+        expenses: [{ date: '2026-01-02', amount: 50 }],
+      });
+      eq('profit summary: net equals the rollup profit less expenses (400 − 80 − 50)', summary.reduce((t, r) => t + r.netProfit, 0), 270);
+      eq('profit summary: returns show as their own line on the return day', summary.find((r) => r.period === '2026-01-02').returnsProfit, -80);
+    }
+
     const groups = [
       ['products', productsGroup],
       ['stock and FEFO', stockGroup],
@@ -1438,6 +1512,7 @@
       ['practice reports: periods and helpers', periodsAndHelpersGroup],
       ['practice reports: from the database', practiceReportsGroup],
       ['users and access', accessGroup],
+      ['business rules: returns, rollups and rounding', returnsAndRollupsGroup],
     ];
 
     const list = document.getElementById('results');

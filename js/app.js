@@ -12,6 +12,7 @@ import * as ui from './core/ui.js';
 import * as anim from './core/anim.js';
 import { seedDefaultAccounts } from './services/ledger.js';
 import { getSettings } from './services/settings.js';
+import { ensureRollups } from './services/rollups.js';
 import { setDigitStyle } from './core/numbers.js';
 import { openSyncSheet } from './pages/_sync-sheet.js';
 import { installErrorBoundary, guardDoubleSubmit } from './core/resilience.js';
@@ -473,6 +474,8 @@ async function boot() {
   renderAvatar();
   // Sync starts in the background. The first screen does not wait for it.
   sync.init();
+  // The daily rollups feed the dashboard. A version change rebuilds them once, in the background.
+  ensureRollups().catch((err) => console.warn('[app] rollups rebuild failed', err));
   router.start();
   $('#app').removeClass('is-booting');
 }

@@ -15,6 +15,7 @@ import { roundHalfAway, sum } from '../core/money.js';
 import { ServiceError, missing, optionalInt, requireInt } from './errors.js';
 import { applyMovementIn, batchRows, costOfUnits } from './stock.js';
 import { postEntryIn, purchaseReturnLines, saleReturnLines } from './ledger.js';
+import { applyReturn } from './rollups.js';
 import { nextDocNumber } from './numbering.js';
 
 /**
@@ -69,8 +70,15 @@ export async function createSaleReturnIn(ctx, input) {
       restored.push({ batchId: a.batchId, batchNo: a.batchNo, units: take });
     }
 
-    // Value: the share of the item, scaled by the sale-level discount and tax.
-    const gross = roundHalfAway(((item.amount * units) / item.units) * (sale.total / sale.subtotal));
+    // Cost: the last return of an item takes the cost left over, so a fully returned sale has exactly its cost back.
+    if (units === remaining) itemCost = (original.cost ?? 0) - (item.returnedCost ?? 0);
+    item.returnedCost = (item.returnedCost ?? 0) + itemCost;
+
+    // Value: the item's share of the sale total (discount and tax included). Each return takes its share of what is
+    // left of the item's value, and the last return of the item takes all of it, so the pieces add up exactly.
+    const itemValue = roundHalfAway((item.amount * sale.total) / sale.subtotal);
+    const valueLeft = itemValue - (item.returnedAmount ?? 0);
+    const gross = units === remaining ? valueLeft : roundHalfAway((valueLeft * units) / remaining);
     const tax = sale.total > 0 ? roundHalfAway((gross * sale.tax) / sale.total) : 0;
 
     item.returnedUnits += units;
@@ -90,6 +98,17 @@ export async function createSaleReturnIn(ctx, input) {
     });
   }
 
+  // When this return empties the sale, the last line takes the rounding left over, so the sale's totals come back exactly.
+  const fullyReturned = saleItems.every((item) => (touched.get(item.id) ?? item).returnedUnits === item.units);
+  if (fullyReturned && lines.length > 0) {
+    const last = lines[lines.length - 1];
+    const valueDiff = sale.total - (sale.returnedTotal ?? 0) - sum(lines.map((l) => l.amount));
+    const taxDiff = sale.tax - (sale.returnedTax ?? 0) - sum(lines.map((l) => l.tax));
+    last.amount += valueDiff;
+    last.tax += taxDiff;
+    last.net = last.amount - last.tax;
+    touched.get(last.saleItemId).returnedAmount += valueDiff;
+  }
   const gross = sum(lines.map((l) => l.amount));
   const tax = sum(lines.map((l) => l.tax));
   const cost = sum(lines.map((l) => l.cost));
@@ -112,6 +131,7 @@ export async function createSaleReturnIn(ctx, input) {
   ctx.put('sales', {
     ...sale,
     returnedTotal: sale.returnedTotal + gross,
+    returnedTax: (sale.returnedTax ?? 0) + tax,
     status: allReturned ? 'returned' : 'partially_returned',
   });
   const doc = ctx.put('returns', {
@@ -132,6 +152,7 @@ export async function createSaleReturnIn(ctx, input) {
     entryId,
   });
   for (const line of lines) ctx.put('returnItems', line);
+  await applyReturn(ctx, doc, lines);
   return { ...doc, items: lines };
 }
 

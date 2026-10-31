@@ -22,6 +22,13 @@ import { applySale } from './rollups.js';
 export const PAYMENT_METHODS = ['cash', 'card', 'bank', 'mobile'];
 const DETAILS_REQUIRED_CLASSES = ['rx', 'controlled'];
 
+/** A discount percentage between 0 and 100. Anything else (text, NaN) is refused rather than guessed. */
+function percentInput(value) {
+  const percent = Number(value);
+  if (!Number.isFinite(percent) || percent < 0 || percent > 100) throw new ServiceError('invalidField', { field: 'discountPercent' });
+  return percent;
+}
+
 /** Price of one line. Price edits are allowed only when the setting allows them. */
 function priceLine(product, raw, settings) {
   const packPrice = optionalInt(raw.packPrice, 'packPrice', 0, product.salePricePerPack);
@@ -90,7 +97,7 @@ export async function createSaleIn(ctx, input) {
   // 3. Totals and payments.
   const subtotal = sum(lines.map((line) => line.amount));
   const discount = input.discountPercent !== undefined && input.discountPercent !== null && input.discountPercent !== ''
-    ? percentOf(subtotal, Math.min(100, Math.max(0, Number(input.discountPercent))))
+    ? percentOf(subtotal, percentInput(input.discountPercent))
     : optionalInt(input.discount, 'discount', 0, 0);
   if (discount > subtotal) throw new ServiceError('discountTooLarge', { subtotal });
   const tax = optionalInt(input.tax, 'tax', 0, 0);

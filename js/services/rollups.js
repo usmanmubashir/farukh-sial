@@ -9,7 +9,7 @@
 import * as db from '../core/db.js';
 import { roundHalfAway } from '../core/money.js';
 
-export const ROLLUP_VERSION = 1;
+export const ROLLUP_VERSION = 2;
 const OPEN_END = '￿';
 
 /* ---------- Pure helpers ---------- */
@@ -83,6 +83,54 @@ export function saleDeltas(sale, items, sign = 1) {
   return { day, products };
 }
 
+/**
+ * The rollup changes one sale return makes, on the return's own date. Sales fall by the returned value before tax,
+ * tax and cost come off, and the customer's credit falls by the part credited. No invoice is added or removed.
+ * The sale's discount is not re-split, so it stays on the sale's own day.
+ */
+export function returnDeltas(ret, lines) {
+  const net = ret.gross - ret.tax;
+  const day = {
+    date: ret.date,
+    delta: {
+      invoices: 0,
+      subtotal: -net,
+      discount: 0,
+      tax: -ret.tax,
+      total: -ret.gross,
+      cost: -ret.cost,
+      profit: -(net - ret.cost),
+      cash: 0,
+      bank: 0,
+      credit: -(ret.credit ?? 0),
+    },
+  };
+  const products = lines.map((line) => ({
+    key: `${ret.date}|${line.productId}`,
+    date: ret.date,
+    productId: line.productId,
+    productName: line.productName,
+    delta: {
+      units: -(line.units ?? 0),
+      lines: 0,
+      amount: -line.net,
+      net: -line.net,
+      cost: -line.cost,
+      profit: -(line.net - line.cost),
+    },
+  }));
+  return { day, products };
+}
+
+/** Applies one sale return to the rollups (called inside the return's transaction). */
+export async function applyReturn(ctx, ret, lines) {
+  const { day, products } = returnDeltas(ret, lines);
+  await addTo(ctx, 'dailySales', ret.date, EMPTY_DAY(ret.date), day.delta);
+  for (const row of products) {
+    await addTo(ctx, 'dailyProducts', row.key, EMPTY_PRODUCT(row.key, row.date, row.productId, row.productName), row.delta);
+  }
+}
+
 const EMPTY_DAY = (date) => ({ date, invoices: 0, subtotal: 0, discount: 0, tax: 0, total: 0, cost: 0, profit: 0, cash: 0, bank: 0, credit: 0 });
 const EMPTY_PRODUCT = (key, date, productId, productName) => ({ key, date, productId, productName, units: 0, lines: 0, amount: 0, net: 0, cost: 0, profit: 0 });
 const EMPTY_CASH = (key, accountCode, date, group) => ({ key, accountCode, date, group, debit: 0, credit: 0 });
@@ -147,17 +195,35 @@ export function rebuildRollups() {
     // Accumulate in memory, then write each row once.
     const days = new Map();
     const products = new Map();
-    for (const sale of await ctx.getAll('sales')) {
-      if (sale.status === 'void') continue;
-      const { day, products: lines } = saleDeltas(sale, itemsBySale.get(sale.id) ?? [], 1);
+    const addDay = (day) => {
       const d = days.get(day.date) ?? EMPTY_DAY(day.date);
       for (const [field, value] of Object.entries(day.delta)) d[field] += value;
       days.set(day.date, d);
-      for (const line of lines) {
-        const p = products.get(line.key) ?? EMPTY_PRODUCT(line.key, line.date, line.productId, line.productName);
-        for (const [field, value] of Object.entries(line.delta)) p[field] += value;
-        products.set(line.key, p);
-      }
+    };
+    const addProduct = (line) => {
+      const p = products.get(line.key) ?? EMPTY_PRODUCT(line.key, line.date, line.productId, line.productName);
+      for (const [field, value] of Object.entries(line.delta)) p[field] += value;
+      products.set(line.key, p);
+    };
+    for (const sale of await ctx.getAll('sales')) {
+      if (sale.status === 'void') continue;
+      const { day, products: lines } = saleDeltas(sale, itemsBySale.get(sale.id) ?? [], 1);
+      addDay(day);
+      lines.forEach(addProduct);
+    }
+
+    // Sale returns reduce the day they were made on, the same way applyReturn() does during normal use.
+    const returnItemsByReturn = new Map();
+    for (const item of await ctx.getAll('returnItems')) {
+      const list = returnItemsByReturn.get(item.returnId) ?? [];
+      list.push(item);
+      returnItemsByReturn.set(item.returnId, list);
+    }
+    for (const ret of await ctx.getAll('returns')) {
+      if (ret.type !== 'sale') continue;
+      const { day, products: lines } = returnDeltas(ret, returnItemsByReturn.get(ret.id) ?? []);
+      addDay(day);
+      lines.forEach(addProduct);
     }
 
     const cash = new Map();

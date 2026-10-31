@@ -188,10 +188,16 @@ export function profitFromDaily({ days, returns = [], expenses = [], granularity
     r.cost += day.cost;
     r.grossProfit += day.profit;
   }
+  // The daily rollup already has sale returns taken off their day. Here they are added back to the gross columns and
+  // shown as their own line, so Gross − Returns − Expenses = Net, and the net is the same as the rollup's.
   for (const ret of returns) {
     if (ret.type !== 'sale') continue;
-    // A sale return gives back the net and restores the cost to stock, so its effect on profit is net − cost.
-    row(keyOf(ret.date)).returnsProfit -= (ret.net ?? 0) - (ret.cost ?? 0);
+    const r = row(keyOf(ret.date));
+    const retProfit = (ret.net ?? 0) - (ret.cost ?? 0);
+    r.revenue += ret.net ?? 0;
+    r.cost += ret.cost ?? 0;
+    r.grossProfit += retProfit;
+    r.returnsProfit -= retProfit;
   }
   for (const expense of expenses) row(keyOf(expense.date)).expenses += expense.amount;
   return [...periods.values()]
