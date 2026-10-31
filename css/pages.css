@@ -3661,3 +3661,23 @@ button.status-pill {
     font-size: var(--fs-base);
   }
 }
+
+/* ---------- Sign-in and setup on phones: the card fits the screen and can scroll when it is taller than the screen ---------- */
+.auth-shell {
+  grid-template-columns: minmax(0, 1fr);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.auth-card {
+  box-sizing: border-box;
+  min-width: 0;
+  width: min(440px, 100%);
+}
+
+.auth-card .btn,
+.auth-card .form,
+.auth-card input {
+  max-width: 100%;
+  min-width: 0;
+}
