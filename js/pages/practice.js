@@ -309,7 +309,6 @@ function liveHtml() {
     ${settings?.practiceShowCost !== false ? `
     <dl class="pr-figures pr-indicators">
       <div><dt>${esc(t('practice.costOfMedicines'))}</dt><dd>${money(cost)}</dd></div>
-      <div class="${profit >= 0 ? 'is-profit' : 'is-loss'}"><dt>${esc(profit >= 0 ? t('practice.profit') : t('practice.loss'))}</dt><dd>${money(Math.abs(profit))}</dd></div>
       <div><dt>${esc(t('practice.margin'))}</dt><dd>${margin === null ? '—' : `${esc(margin)}%`}</dd></div>
     </dl>` : ''}
     ${warn ? `<p class="pr-warn" role="status">${esc(t('practice.atLoss', { amount: rupees(cost - charged) }))}</p>` : ''}`;

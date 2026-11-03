@@ -67,11 +67,35 @@ function ring(value, max, tone) {
     </svg>`;
 }
 
+/* Decorative nature scene behind the hero: sun, drifting clouds, hills, swaying trees, birds and falling leaves.
+   Pure SVG, animated by the CSS in pages.css. Hidden from assistive tech. */
+const HERO_SCENE = `<svg class="hero-scene" viewBox="0 0 400 200" preserveAspectRatio="xMidYMax slice" aria-hidden="true" focusable="false">
+        <defs>
+          <radialGradient id="hs-sun"><stop offset="0" stop-color="#fef3c7" stop-opacity="0.9"/><stop offset="1" stop-color="#fef3c7" stop-opacity="0"/></radialGradient>
+        </defs>
+        <circle class="sc-sun" cx="318" cy="56" r="58" fill="url(#hs-sun)"/>
+        <circle cx="318" cy="56" r="20" fill="#fef3c7"/>
+        <g class="sc-cloud" style="animation-delay:-10s"><ellipse cx="60" cy="52" rx="26" ry="9" fill="#fff" opacity="0.85"/><ellipse cx="78" cy="46" rx="17" ry="11" fill="#fff" opacity="0.85"/><ellipse cx="46" cy="49" rx="13" ry="8" fill="#fff" opacity="0.85"/></g>
+        <g class="sc-cloud" style="animation-duration:52s;animation-delay:-30s"><ellipse cx="200" cy="34" rx="18" ry="6" fill="#fff" opacity="0.6"/><ellipse cx="212" cy="30" rx="11" ry="7" fill="#fff" opacity="0.6"/></g>
+        <path d="M0 150C60 118 120 120 180 142S300 116 400 136V200H0Z" fill="#34d399" opacity="0.35"/>
+        <path d="M0 170C70 146 150 150 210 168S340 152 400 162V200H0Z" fill="#047857" opacity="0.55"/>
+        <g class="sc-tree"><rect x="68" y="150" width="4" height="22" fill="#064e3b"/><circle cx="70" cy="144" r="13" fill="#065f46"/></g>
+        <g class="sc-tree" style="animation-delay:-2s"><rect x="95" y="158" width="3" height="14" fill="#064e3b"/><circle cx="96.5" cy="154" r="9" fill="#047857"/></g>
+        <g class="sc-tree" style="animation-delay:-3.5s"><rect x="346" y="156" width="4" height="16" fill="#064e3b"/><circle cx="348" cy="150" r="11" fill="#065f46"/></g>
+        <g class="sc-bird" style="animation-delay:-6s"><path d="M60 40q3-3 6 0q3-3 6 0" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></g>
+        <g class="sc-bird" style="animation-duration:30s;animation-delay:-16s"><path d="M60 62q2.5-2.5 5 0q2.5-2.5 5 0" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/></g>
+        <ellipse class="sc-leaf" cx="30" cy="0" rx="3" ry="2" fill="#bbf7d0" style="animation-duration:16s;animation-delay:-11s"/>
+        <ellipse class="sc-leaf" cx="96" cy="0" rx="4" ry="2" fill="#fde68a" style="animation-duration:13s;animation-delay:-2s"/>
+        <ellipse class="sc-leaf" cx="150" cy="0" rx="3" ry="2" fill="#fbcfe8" style="animation-duration:15s;animation-delay:-7s"/>
+        <ellipse class="sc-leaf" cx="210" cy="0" rx="4" ry="2" fill="#bbf7d0" style="animation-duration:11s;animation-delay:-4s"/>
+        <ellipse class="sc-leaf" cx="265" cy="0" rx="3" ry="2" fill="#fde68a" style="animation-duration:14s;animation-delay:-9s"/>
+        <ellipse class="sc-leaf" cx="330" cy="0" rx="4" ry="2" fill="#fbcfe8" style="animation-duration:12s;animation-delay:-5s"/>
+      </svg>`;
+
 function hero(d) {
   return `
     <section class="dash-hero hero" data-anim="rise">
-      <span class="capsule" style="--x:6%;--y:14%;--rot:-18deg;--t:7s"></span>
-      <span class="capsule capsule--half" style="--x:30%;--y:66%;--rot:22deg;--t:9s"></span>
+      ${HERO_SCENE}
       <div class="dash-hero-top">
         <span class="hero-kicker">${esc(i18n.t('hero.today'))}</span>
         <span class="hero-date">${esc(formatDate(d.today))}</span>

@@ -2801,6 +2801,90 @@ button.status-pill {
   }
 }
 
+/* Dashboard hero scene: a day sky with a sun, clouds, hills, trees, birds and falling leaves.
+   The scene is decorative (aria-hidden, no pointer events) and sits behind the text. */
+.dash-hero {
+  background: linear-gradient(180deg, #0369a1 0%, #0f766e 58%, #14532d 100%);
+}
+
+.dash-hero > .hero-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.hero-scene .sc-sun {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sc-glow 6s ease-in-out infinite;
+}
+
+.hero-scene .sc-cloud {
+  animation: sc-cloud 40s linear infinite;
+}
+
+.hero-scene .sc-tree {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: sc-sway 5s ease-in-out infinite;
+}
+
+.hero-scene .sc-bird {
+  animation: sc-bird 24s linear infinite;
+}
+
+.hero-scene .sc-leaf {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sc-leaf 12s linear infinite;
+}
+
+@keyframes sc-glow {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50% { transform: scale(1.08); opacity: 1; }
+}
+
+@keyframes sc-cloud {
+  from { transform: translateX(-90px); }
+  to { transform: translateX(480px); }
+}
+
+@keyframes sc-sway {
+  0%, 100% { transform: rotate(-1.5deg); }
+  50% { transform: rotate(1.5deg); }
+}
+
+@keyframes sc-bird {
+  from { transform: translate(-40px, 0); }
+  to { transform: translate(460px, -18px); }
+}
+
+@keyframes sc-leaf {
+  0% { transform: translate(0, -12px) rotate(0deg); }
+  35% { transform: translate(16px, 70px) rotate(200deg); }
+  70% { transform: translate(-12px, 150px) rotate(420deg); }
+  100% { transform: translate(-30px, 220px) rotate(600deg); }
+}
+
+/* Reduced motion keeps the scene still: no drift, no falling leaves, no birds. */
+@media (prefers-reduced-motion: reduce) {
+  .hero-scene .sc-sun,
+  .hero-scene .sc-cloud,
+  .hero-scene .sc-tree,
+  .hero-scene .sc-bird,
+  .hero-scene .sc-leaf {
+    animation: none;
+  }
+
+  .hero-scene .sc-bird,
+  .hero-scene .sc-leaf {
+    display: none;
+  }
+}
+
 /* ---------- Practice screen and history (violet identity, separate from the sale screen) ---------- */
 
 .practice-root {
